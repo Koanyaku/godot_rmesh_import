@@ -438,14 +438,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						# Get light intensity. 4-byte float.
 						var intensity: float = file.get_float() as float
 						
-						var omni_light: OmniLight3D = OmniLight3D.new()
-						omni_light.name = "light"
-						omni_light.position = pos
-						omni_light.omni_range = range
-						omni_light.light_color = actual_color
-						omni_light.light_energy = intensity
-						lights_folder_node.add_child(omni_light, true)
-						omni_light.owner = saved_scene_root
+						var light_node: OmniLight3D = OmniLight3D.new()
+						light_node.name = "light"
+						light_node.position = pos
+						light_node.omni_range = range
+						light_node.light_color = actual_color
+						light_node.light_energy = intensity
+						lights_folder_node.add_child(light_node, true)
+						light_node.owner = saved_scene_root
 				"waypoint":
 					if include_waypoints:
 						# Get waypoint position. Each X, Y and Z position is a 4-byte float.
@@ -524,8 +524,6 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						screen_node.position = pos
 						screens_folder_node.add_child(screen_node, true)
 						screen_node.owner = saved_scene_root
-						
-						print("Screen found.")
 				_:
 					pass
 					#print("Unknown entity detected, probably custom entity.")
