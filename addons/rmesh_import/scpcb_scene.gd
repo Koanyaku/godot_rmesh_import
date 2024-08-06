@@ -71,15 +71,15 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 				},
 				{
 					"name": "entities/screens/include_screens",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/waypoints/include_waypoints",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/lights/include_lights",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/lights/light_range_scale",
@@ -87,27 +87,27 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 				},
 				{
 					"name": "entities/spotlights/include_spotlights",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/spotlights/spotlight_range_scale",
-					"default_value": 1.0
+					"default_value": 1.0,
 				},
 				{
 					"name": "entities/sound_emitters/include_sound_emitters",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/sound_emitters/sound_range_scale",
-					"default_value": 1.0
+					"default_value": 1.0,
 				},
 				{
 					"name": "entities/player_starts/include_player_starts",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/models/include_models",
-					"default_value": true
+					"default_value": true,
 				},
 			]
 		_:
@@ -331,7 +331,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						# Fix up material path so it works.
 						if n_mat_path.right(1) != "/":
 							n_mat_path += "/"
-							n_mat_path += tex_name.trim_suffix(tex_name.get_extension()) + "tres"
+						n_mat_path += tex_name.trim_suffix(tex_name.get_extension()) + "tres"
 						# If we don't have a material loaded, we can check if it exists
 						# and load it. Then we say the material was checked. We only
 						# need to check it once to know if it exists or not.
@@ -370,7 +370,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				new_arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surf_arrays)
 				
 				var coll_body: StaticBody3D = StaticBody3D.new()
-				var coll_body_name: String = arr_mesh.surface_get_name(i) as String
+				var coll_body_name: String = arr_mesh.surface_get_name(i).get_file() as String
 				if !coll_body_name.ends_with("_collision"):
 					coll_body_name += "_collision"
 				coll_body.name = coll_body_name
@@ -469,7 +469,6 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						return FAILED
 					
 					var curr_trb_name: String = read_b3d_string(file) as String
-					print("Current trigger box name: ", curr_trb_name, "\n")
 					
 					var curr_trb_area_node: Area3D = Area3D.new()
 					curr_trb_area_node.name = curr_trb_name
@@ -499,15 +498,18 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						file.get_32()
 					read_b3d_string(file) # Trigger box name
 	
-	if bool(options.get("entities/include_entities")):
-		var include_screens: bool = options.get("entities/screens/include_screens") as bool
-		var include_waypoints: bool = options.get("entities/waypoints/include_waypoints") as bool
-		var include_lights: bool = options.get("entities/lights/include_lights") as bool
-		var include_spotlights: bool = options.get("entities/spotlights/include_spotlights") as bool
-		var include_sound_emitters: bool = options.get("entities/sound_emitters/include_sound_emitters") as bool
-		var include_player_starts: bool = options.get("entities/player_starts/include_player_starts") as bool
-		var include_models: bool = options.get("entities/models/include_models") as bool
-		
+	var include_screens: bool = options.get("entities/screens/include_screens") as bool
+	var include_waypoints: bool = options.get("entities/waypoints/include_waypoints") as bool
+	var include_lights: bool = options.get("entities/lights/include_lights") as bool
+	var include_spotlights: bool = options.get("entities/spotlights/include_spotlights") as bool
+	var include_sound_emitters: bool = options.get("entities/sound_emitters/include_sound_emitters") as bool
+	var include_player_starts: bool = options.get("entities/player_starts/include_player_starts") as bool
+	var include_models: bool = options.get("entities/models/include_models") as bool
+	
+	if bool(options.get("entities/include_entities")) and (
+		include_screens or include_waypoints or include_lights or include_spotlights
+		or include_sound_emitters or include_player_starts or include_models
+	):
 		var screens_folder_node: Node = null
 		var waypoints_folder_node: Node = null
 		var lights_folder_node: Node = null
@@ -516,107 +518,84 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		var player_starts_folder_node: Node = null
 		var models_folder_node: Node = null
 		
-		if include_screens:
-			screens_folder_node = Node.new() as Node
-			screens_folder_node.name = "screens"
-			saved_scene_root.add_child(screens_folder_node)
-			screens_folder_node.owner = saved_scene_root
-		
-		if include_waypoints:
-			waypoints_folder_node = Node.new() as Node
-			waypoints_folder_node.name = "waypoints"
-			saved_scene_root.add_child(waypoints_folder_node)
-			waypoints_folder_node.owner = saved_scene_root
-		
-		if include_lights:
-			lights_folder_node = Node.new() as Node
-			lights_folder_node.name = "lights"
-			saved_scene_root.add_child(lights_folder_node)
-			lights_folder_node.owner = saved_scene_root
-		
-		if include_spotlights:
-			spotlights_folder_node = Node.new() as Node
-			spotlights_folder_node.name = "spotlights"
-			saved_scene_root.add_child(spotlights_folder_node)
-			spotlights_folder_node.owner = saved_scene_root
-		
-		if include_sound_emitters:
-			sound_emitters_folder_node = Node.new() as Node
-			sound_emitters_folder_node.name = "sound_emitters"
-			saved_scene_root.add_child(sound_emitters_folder_node)
-			sound_emitters_folder_node.owner = saved_scene_root
-		
-		if include_player_starts:
-			player_starts_folder_node = Node.new() as Node
-			player_starts_folder_node.name = "player_starts"
-			saved_scene_root.add_child(player_starts_folder_node)
-			player_starts_folder_node.owner = saved_scene_root
-		
-		if include_models:
-			models_folder_node = Node.new() as Node
-			models_folder_node.name = "models"
-			saved_scene_root.add_child(models_folder_node)
-			models_folder_node.owner = saved_scene_root
-		
 		var light_range_scale: float = options.get("entities/lights/light_range_scale") as float
 		var spotlight_range_scale: float = options.get("entities/spotlights/spotlight_range_scale") as float
+		var sound_range_scale: float = options.get("entities/sound_emitters/sound_range_scale") as float
 		
 		var ent_count: int = file.get_32() as int
 		for i in ent_count as int:
 			var ent_name: String = read_b3d_string(file) as String
 			match(ent_name):
 				"screen":
+					# Get screen position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float
+					var pos_y: float = file.get_float() as float
+					var pos_z: float = file.get_float() as float
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get screen image file path.
+					var img_path: String = read_b3d_string(file) as String
+					
 					if include_screens:
-						# Get screen position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float
-						var pos_y: float = file.get_float() as float
-						var pos_z: float = file.get_float() as float
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+						if !screens_folder_node:
+							screens_folder_node = Node.new() as Node
+							screens_folder_node.name = "screens"
+							saved_scene_root.add_child(screens_folder_node)
+							screens_folder_node.owner = saved_scene_root
 						
-						# Get screen image file path.
-						var img_path: String = read_b3d_string(file) as String
-						
-						var screen_node: Node3D = Node3D.new()
+						var screen_node: Node3D = Node3D.new() as Node3D
 						screen_node.name = "screen"
 						screen_node.position = pos
 						screens_folder_node.add_child(screen_node, true)
 						screen_node.owner = saved_scene_root
 				"waypoint":
+					# Get waypoint position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float
+					var pos_y: float = file.get_float() as float
+					var pos_z: float = file.get_float() as float
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
 					if include_waypoints:
-						# Get waypoint position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float
-						var pos_y: float = file.get_float() as float
-						var pos_z: float = file.get_float() as float
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+						if !waypoints_folder_node:
+							waypoints_folder_node = Node.new() as Node
+							waypoints_folder_node.name = "waypoints"
+							saved_scene_root.add_child(waypoints_folder_node)
+							waypoints_folder_node.owner = saved_scene_root
 						
-						var waypoint_node: Node3D = Node3D.new()
+						var waypoint_node: Node3D = Node3D.new() as Node3D
 						waypoint_node.name = "waypoint"
 						waypoint_node.position = pos
 						waypoints_folder_node.add_child(waypoint_node, true)
 						waypoint_node.owner = saved_scene_root
 				"light":
+					# NOTICE: Lighting will always look different with imported lights 
+					# than how it looks in SCP-CB. The lights receive values from
+					# the file, but you will have to tweak them more if you want to get
+					# them to look the same (or almost the same) as in SCP-CB.
+					
+					# Get light position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float
+					var pos_y: float = file.get_float() as float
+					var pos_z: float = file.get_float() as float
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get light range. 4-byte float.
+					var range: float = file.get_float() * light_range_scale as float
+					
+					# Get light color string.
+					var color_string = read_b3d_string(file) as String
+					var split_color_string: PackedStringArray = color_string.split(" ") as PackedStringArray
+					var actual_color = Color8(int(split_color_string[0]), int(split_color_string[1]), int(split_color_string[2]))
+					
+					# Get light intensity. 4-byte float.
+					var intensity: float = file.get_float() as float
+					
 					if include_lights:
-						# NOTICE: Lighting will always look different with imported lights 
-						# than how it looks in SCP-CB. The lights receive values from
-						# the file, but you will have to tweak them more if you want to get
-						# them to look the same (or almost the same) as in SCP-CB.
-						
-						# Get light position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float
-						var pos_y: float = file.get_float() as float
-						var pos_z: float = file.get_float() as float
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
-						
-						# Get light range. 4-byte float.
-						var range: float = file.get_float() * light_range_scale as float
-						
-						# Get light color string.
-						var color_string = read_b3d_string(file) as String
-						var split_color_string: PackedStringArray = color_string.split(" ") as PackedStringArray
-						var actual_color = Color8(int(split_color_string[0]), int(split_color_string[1]), int(split_color_string[2]))
-						
-						# Get light intensity. 4-byte float.
-						var intensity: float = file.get_float() as float
+						if !lights_folder_node:
+							lights_folder_node = Node.new() as Node
+							lights_folder_node.name = "lights"
+							saved_scene_root.add_child(lights_folder_node)
+							lights_folder_node.owner = saved_scene_root
 						
 						var light_node: OmniLight3D = OmniLight3D.new() as OmniLight3D
 						light_node.name = "light"
@@ -627,38 +606,44 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						lights_folder_node.add_child(light_node, true)
 						light_node.owner = saved_scene_root
 				"spotlight":
+					# NOTICE: Lighting will always look different with imported spotlights
+					# than how it looks in SCP-CB. The spotlights receive values from
+					# the file, but you will have to tweak them more if you want to get
+					# them to look the same (or almost the same) as in SCP-CB.
+					
+					# Get spotlight position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float
+					var pos_y: float = file.get_float() as float
+					var pos_z: float = file.get_float() as float
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get spotlight range. 4-byte float.
+					var range: float = file.get_float() * spotlight_range_scale as float
+					
+					# Get spotlight color string.
+					var color_string = read_b3d_string(file) as String
+					var split_color_string: PackedStringArray = color_string.split(" ") as PackedStringArray
+					var actual_color = Color8(int(split_color_string[0]), int(split_color_string[1]), int(split_color_string[2]))
+					
+					# Get spotlight intensity. 4-byte float.
+					var intensity: float = file.get_float() as float
+					
+					# Get spotlight angles string.
+					var angles: String = read_b3d_string(file) as String
+					var angles_split: PackedStringArray = angles.split(" ") as PackedStringArray
+					var rot_from_angles: Vector3 = Vector3(-int(angles_split[0]), int(angles_split[1]), int(angles_split[2]))
+					
+					# Get spotlight inner cone angle. 4-byte int.
+					var inner_cone_angle: int = file.get_32() as int
+					# Get spotlight outer cone angle. 4-byte int.
+					var outer_cone_angle: int = file.get_32() as int
+					
 					if include_spotlights:
-						# NOTICE: Lighting will always look different with imported spotlights
-						# than how it looks in SCP-CB. The spotlights receive values from
-						# the file, but you will have to tweak them more if you want to get
-						# them to look the same (or almost the same) as in SCP-CB.
-						
-						# Get spotlight position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float
-						var pos_y: float = file.get_float() as float
-						var pos_z: float = file.get_float() as float
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
-						
-						# Get spotlight range. 4-byte float.
-						var range: float = file.get_float() * spotlight_range_scale as float
-						
-						# Get spotlight color string.
-						var color_string = read_b3d_string(file) as String
-						var split_color_string: PackedStringArray = color_string.split(" ") as PackedStringArray
-						var actual_color = Color8(int(split_color_string[0]), int(split_color_string[1]), int(split_color_string[2]))
-						
-						# Get spotlight intensity. 4-byte float.
-						var intensity: float = file.get_float() as float
-						
-						# Get spotlight angles string.
-						var angles: String = read_b3d_string(file) as String
-						var angles_split: PackedStringArray = angles.split(" ") as PackedStringArray
-						var rot_from_angles: Vector3 = Vector3(-int(angles_split[0]), int(angles_split[1]), int(angles_split[2]))
-						
-						# Get spotlight inner cone angle. 4-byte int.
-						var inner_cone_angle: int = file.get_32() as int
-						# Get spotlight outer cone angle. 4-byte int.
-						var outer_cone_angle: int = file.get_32() as int
+						if !spotlights_folder_node:
+							spotlights_folder_node = Node.new() as Node
+							spotlights_folder_node.name = "spotlights"
+							saved_scene_root.add_child(spotlights_folder_node)
+							spotlights_folder_node.owner = saved_scene_root
 						
 						var spotlight_node: SpotLight3D = SpotLight3D.new() as SpotLight3D
 						spotlight_node.name = "spotlight"
@@ -671,36 +656,49 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						spotlights_folder_node.add_child(spotlight_node, true)
 						spotlight_node.owner = saved_scene_root
 				"soundemitter":
+					# Get sound emitter position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float
+					var pos_y: float = file.get_float() as float
+					var pos_z: float = file.get_float() as float
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get sound index. 4-byte int.
+					var snd_ind: int = file.get_32() as int
+					
+					# Get soundemitter range. 4-byte float.
+					var range: float = file.get_float() as float
+					
 					if include_sound_emitters:
-						# Get sound emitter position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float
-						var pos_y: float = file.get_float() as float
-						var pos_z: float = file.get_float() as float
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+						if !sound_emitters_folder_node:
+							sound_emitters_folder_node = Node.new() as Node
+							sound_emitters_folder_node.name = "sound_emitters"
+							saved_scene_root.add_child(sound_emitters_folder_node)
+							sound_emitters_folder_node.owner = saved_scene_root
 						
-						# Get sound index. 4-byte int.
-						var snd_ind: int = file.get_32() as int
-						
-						# Get soundemitter range. 4-byte float.
-						var range: float = file.get_float() as float
-						
-						var emitter_node: Node3D = Node3D.new()
+						var emitter_node: AudioStreamPlayer3D = AudioStreamPlayer3D.new() as AudioStreamPlayer3D
 						emitter_node.name = "soundemitter"
 						emitter_node.position = pos
+						emitter_node.max_distance = range * sound_range_scale
 						sound_emitters_folder_node.add_child(emitter_node, true)
 						emitter_node.owner = saved_scene_root
 				"playerstart":
+					# Get player start position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float
+					var pos_y: float = file.get_float() as float
+					var pos_z: float = file.get_float() as float
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get player start angles string.
+					var angles: String = read_b3d_string(file) as String
+					var angles_split: PackedStringArray = angles.split(" ") as PackedStringArray
+					var rot_from_angles: Vector3 = Vector3(-int(angles_split[0]), int(angles_split[1]), int(angles_split[2]))
+					
 					if include_player_starts:
-						# Get player start position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float
-						var pos_y: float = file.get_float() as float
-						var pos_z: float = file.get_float() as float
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
-						
-						# Get player start angles string.
-						var angles: String = read_b3d_string(file) as String
-						var angles_split: PackedStringArray = angles.split(" ") as PackedStringArray
-						var rot_from_angles: Vector3 = Vector3(-int(angles_split[0]), int(angles_split[1]), int(angles_split[2]))
+						if !player_starts_folder_node:
+							player_starts_folder_node = Node.new() as Node
+							player_starts_folder_node.name = "player_starts"
+							saved_scene_root.add_child(player_starts_folder_node)
+							player_starts_folder_node.owner = saved_scene_root
 						
 						var playerstart_node: Node3D = Node3D.new()
 						playerstart_node.name = "playerstart"
@@ -709,29 +707,35 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						player_starts_folder_node.add_child(playerstart_node, true)
 						playerstart_node.owner = saved_scene_root
 				"model":
+					# Get model file path.
+					var model_path: String = read_b3d_string(file) as String
+					
+					# Get model position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
+					var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
+					var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get model rotation. Each X, Y and Z rotation is a 4-byte float.
+					var rot_x: float = file.get_float() as float # CBRE-EX 'X' rotation
+					var rot_y: float = file.get_float() as float # CBRE-EX 'Z' rotation
+					var rot_z: float = file.get_float() as float # CBRE-EX 'Y' rotation
+					var rot: Vector3 = Vector3(rot_x, rot_y, -rot_z) as Vector3
+					
+					# Get model scale. Each X, Y and Z scale is a 4-byte float.
+					var scale_x: float = file.get_float() as float # CBRE-EX 'X' scale
+					var scale_y: float = file.get_float() as float # CBRE-EX 'Z' scale
+					var scale_z: float = file.get_float() as float # CBRE-EX 'Y' scale
+					var scale: Vector3 = Vector3(scale_x, scale_y, -scale_z) as Vector3
+					
 					if include_models:
-						# Get model file path.
-						var model_path: String = read_b3d_string(file) as String
+						if !models_folder_node:
+							models_folder_node = Node.new() as Node
+							models_folder_node.name = "models"
+							saved_scene_root.add_child(models_folder_node)
+							models_folder_node.owner = saved_scene_root
 						
-						# Get model position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
-						var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
-						var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
-						
-						# Get model rotation. Each X, Y and Z rotation is a 4-byte float.
-						var rot_x: float = file.get_float() as float # CBRE-EX 'X' rotation
-						var rot_y: float = file.get_float() as float # CBRE-EX 'Z' rotation
-						var rot_z: float = file.get_float() as float # CBRE-EX 'Y' rotation
-						var rot: Vector3 = Vector3(rot_x, rot_y, -rot_z) as Vector3
-						
-						# Get model scale. Each X, Y and Z scale is a 4-byte float.
-						var scale_x: float = file.get_float() as float # CBRE-EX 'X' scale
-						var scale_y: float = file.get_float() as float # CBRE-EX 'Z' scale
-						var scale_z: float = file.get_float() as float # CBRE-EX 'Y' scale
-						var scale: Vector3 = Vector3(scale_x, scale_y, -scale_z) as Vector3
-						
-						var model_node: Node3D = Node3D.new()
+						var model_node: Node3D = Node3D.new() as Node3D
 						model_node.name = "model"
 						model_node.position = pos
 						model_node.rotation_degrees = rot

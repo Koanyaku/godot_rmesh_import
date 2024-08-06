@@ -45,10 +45,6 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 					"property_hint": PROPERTY_HINT_LINK,
 				},
 				{
-					"name": "mesh/merge_duplicated_surfaces",
-					"default_value": true,
-				},
-				{
 					"name": "mesh/include_invisible_collisions",
 					"default_value": true,
 				},
@@ -71,7 +67,7 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 				},
 				{
 					"name": "entities/lights/include_lights",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/lights/light_range_scale",
@@ -79,19 +75,23 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 				},
 				{
 					"name": "entities/waypoints/include_waypoints",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/sound_emitters/include_sound_emitters",
-					"default_value": true
+					"default_value": true,
+				},
+				{
+					"name": "entities/sound_emitters/sound_range_scale",
+					"default_value": 1.0,
 				},
 				{
 					"name": "entities/models/include_models",
-					"default_value": true
+					"default_value": true,
 				},
 				{
 					"name": "entities/screens/include_screens",
-					"default_value": true
+					"default_value": true,
 				},
 			]
 		_:
@@ -110,20 +110,19 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	if header != "RoomMesh":
 		return ERR_FILE_UNRECOGNIZED
 	
+	var scale_mesh: Vector3 = options.get("mesh/scale_mesh") as Vector3
+	
 	var saved_scene_root: Node3D = Node3D.new()
 	var saved_scene_root_name: String = source_file.get_file().trim_suffix(".rmesh").rstrip(".") as String
 	saved_scene_root.name = saved_scene_root_name
 	
-	# Initialize the ArrayMesh and SurfaceTool.
-	var arr_mesh: ArrayMesh = ArrayMesh.new() as ArrayMesh
-	var st: SurfaceTool = SurfaceTool.new() as SurfaceTool
-	
 	# Get the texture count.
 	var tex_count: int = file.get_32() as int
 	
-	# Just so removing duplicated surfaces works.
-	var st_has_begun: bool = false as bool 
-	var prev_tex_name: String = "" as String
+	# We accumulate all the data for all the textures in this texture dictionary.
+	# Each texture will store an array of dictionaries, where each dictionary will store
+	# a specific set of indices, where each indice stores an array of values for that indice.
+	var tex_dict: Dictionary = {} as Dictionary
 	
 	# Each texture has a set amount of faces associated with it.
 	# In the RMesh file, faces are just stored as a sequence of vertices for each texture.
@@ -137,20 +136,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# If the texture flag is 3, the texture is without a lightmap.
 		var tex_flag = file.get_8() as int
 		var tex_name: String = read_b3d_string(file) as String
-		
-		# Merging duplicated surfaces.
-		if bool(options.get("mesh/merge_duplicated_surfaces")):
-			# If the previous texture name is the same as the current texture name,
-			# we know that we can merge the two surfaces.
-			if (prev_tex_name != "") and (prev_tex_name != tex_name):
-				st.generate_normals()
-				st.commit(arr_mesh)
-				st.clear()
-				st_has_begun = false
-				var surf_name: String = prev_tex_name.get_file().trim_suffix(prev_tex_name.get_extension()).rstrip(".") as String
-				arr_mesh.surface_set_name(arr_mesh.get_surface_count() - 1, surf_name)
-		
-		prev_tex_name = tex_name
+		if !tex_dict.has(tex_name):
+			tex_dict[tex_name] = []
 		
 		# Get the vertex count.
 		var vertex_count: int = file.get_32() as int
@@ -176,7 +163,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var pos_z: float = vertex_data.decode_float(8) # CBRE-EX 'Y' position
 			# In CBRE-EX, the positive 'Y' axis (Godot's positive Z axis) is in the opposite 
 			# direction to Godot's positive Z axis, so we have to flip it here.
-			vertices.append(Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")))
+			vertices.append(Vector3(pos_x, pos_y, -pos_z) * scale_mesh)
 			
 			# Get the texture and lightmap UVs.
 			var texU = vertex_data.decode_float(12)
@@ -211,11 +198,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			# If an indice already has vertex data associated with it, 
 			# we know we can just skip it.
 			if !vert_ind_pairs.has(tri_indices[j]):
-				vert_ind_pairs[tri_indices[j]] = {
-					"vertex": vertices[pos_in_ind_arr],
-					"tex_uv": tex_uvs[pos_in_ind_arr],
-					"lm_uv": lm_uvs[pos_in_ind_arr]
-				}
+				vert_ind_pairs[tri_indices[j]] = [
+					vertices[pos_in_ind_arr],
+					tex_uvs[pos_in_ind_arr],
+					lm_uvs[pos_in_ind_arr]
+				]
 			else:
 				pos_in_ind_arr -= 1
 		
@@ -223,46 +210,24 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		if vert_ind_pairs.size() != vertices.size():
 			return FAILED
 		
-		if !st_has_begun:
-			st.begin(Mesh.PRIMITIVE_TRIANGLES)
-			st_has_begun = true
-		# Add data associated with each indice to the SurfaceTool.
-		for j in tri_indices as PackedInt32Array:
-			st.set_uv(vert_ind_pairs.get(j).get("tex_uv"))
-			var mat_path = options.get("materials/material_path") as String
-			if mat_path != "":
-				# Fix up material path so it works.
-				if mat_path.right(1) != "/":
-					mat_path += "/"
-				mat_path += tex_name.trim_suffix(tex_name.get_extension()) + "tres"
-				if ResourceLoader.exists(mat_path, "Material"):
-					st.set_material(load(mat_path))
-			st.add_vertex(vert_ind_pairs.get(j).get("vertex"))
-		
-		# If we want to merge duplicated surfaces, we don't allow the SurfaceTool
-		# to add a surface to the ArrayMesh just yet. Instead, we do the duplication
-		# checking when we begin analyzing a new texture. However, when we are
-		# analyzing the last texture, we create the last surface, and aren't going
-		# to be checking another texture, so we commit the surface anyway.
-		if !bool(options.get("mesh/merge_duplicated_surfaces")) or i == tex_count - 1:
-			st.generate_normals()
-			st.commit(arr_mesh)
-			st.clear()
-			st_has_begun = false
-			var surf_name: String = prev_tex_name.get_file().trim_suffix(prev_tex_name.get_extension()).rstrip(".") as String
-			arr_mesh.surface_set_name(arr_mesh.get_surface_count() - 1, surf_name)
+		Array(tex_dict.get(tex_name)).append({
+			"indices": tri_indices,
+			"pairs": vert_ind_pairs
+		})
 	
 	var has_invis_coll: bool = file.get_32() as bool
+	var include_invis_coll: bool = options.get("mesh/include_invisible_collisions") as bool
 	
 	# Handle invisible collisions. We mostly have to repeat the same processes
 	# as with the normal face data.
-	# NOTE: I feel like this could be simplified. Maybe will look into it later.
-	if has_invis_coll and bool(options.get("mesh/include_invisible_collisions")):
+	if has_invis_coll and include_invis_coll:
+		tex_dict["invisible_collision"] = []
+		
 		var invis_coll_vert_count: int = file.get_32() as int
 		
 		# Get the invisible collision vertices.
 		var invis_coll_vertices: PackedVector3Array = PackedVector3Array() as PackedVector3Array
-		for j in invis_coll_vert_count:
+		for i in invis_coll_vert_count:
 			# The actual data for each invisible collision vertex takes up 12 bytes.
 			# Only the X, Y and Z positions get saved with invisible collision vertices.
 			# Other than that, we do mostly the same things as with normal face vertices.
@@ -271,7 +236,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var pos_x: float = invis_coll_vertex_data.decode_float(0) # CBRE-EX 'X' position
 			var pos_y: float = invis_coll_vertex_data.decode_float(4) # CBRE-EX 'Z' position
 			var pos_z: float = invis_coll_vertex_data.decode_float(8) # CBRE-EX 'Y' position
-			invis_coll_vertices.append(Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")))
+			invis_coll_vertices.append(Vector3(pos_x, pos_y, -pos_z) * scale_mesh)
 			
 			# The data for each invisible collision vertex doesn't end with any extra bytes.
 		
@@ -280,32 +245,81 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		# Get the invisible collision triangle indices.
 		var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array() as PackedInt32Array
-		for j in invis_coll_tri_count * 3:
+		for i in invis_coll_tri_count * 3:
 			# Each indice is stored as 4 bytes.
 			invis_coll_tri_indices.append(file.get_32() as int)
+		
+		# The triangle indice count must be a multiple of the triangle count.
+		if invis_coll_tri_indices.size() % invis_coll_tri_count:
+			return FAILED
 		
 		# For each invisible collision indice, give it it's corresponding vertex.
 		var invis_coll_vert_ind_pairs: Dictionary = {} as Dictionary
 		var pos_in_invis_coll_ind_arr: int = -1 as int
-		for j in invis_coll_tri_indices.size() as int:
+		for i in invis_coll_tri_indices.size() as int:
 			pos_in_invis_coll_ind_arr += 1
 			# If an indice already has vertex data associated with it, 
 			# we know we can just skip it.
-			if !invis_coll_vert_ind_pairs.has(invis_coll_tri_indices[j]):
-				invis_coll_vert_ind_pairs[invis_coll_tri_indices[j]] = invis_coll_vertices[pos_in_invis_coll_ind_arr]
+			if !invis_coll_vert_ind_pairs.has(invis_coll_tri_indices[i]):
+				invis_coll_vert_ind_pairs[invis_coll_tri_indices[i]] = [
+					invis_coll_vertices[pos_in_invis_coll_ind_arr]
+				]
 			else:
 				pos_in_invis_coll_ind_arr -= 1
 		
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		st_has_begun = true
-		for j in invis_coll_tri_indices as PackedInt32Array:
-			st.add_vertex(invis_coll_vert_ind_pairs.get(j))
+		# Every invisible collision vertex should have only one indice associated with it.
+		if invis_coll_vert_ind_pairs.size() != invis_coll_vertices.size():
+			return FAILED
 		
+		Array(tex_dict.get("invisible_collision")).append({
+			"indices": invis_coll_tri_indices,
+			"pairs": invis_coll_vert_ind_pairs
+		})
+	
+	# Initialize the ArrayMesh and SurfaceTool.
+	var arr_mesh: ArrayMesh = ArrayMesh.new() as ArrayMesh
+	var st: SurfaceTool = SurfaceTool.new() as SurfaceTool
+	
+	var mat_path: String = options.get("materials/material_path") as String
+	var current_material_checked: bool = false as bool
+	var current_loaded_material: Material = null
+	
+	# For each texture in the texture dictionary.
+	for i in tex_dict.keys() as Array[Dictionary]:
+		var tex_name: String = tex_dict.find_key(tex_dict.get(i)) as String
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		# For each dictionary stored with the texture.
+		for j in Array(tex_dict.get(i)) as Array[Dictionary]:
+			# For each indice in the indices array.
+			var pairs: Dictionary = j.get("pairs") as Dictionary
+			for k in j.get("indices") as Array[int]:
+				# Set the texture UV.
+				# Invisible collisions don't have UVs or materials.
+				if tex_name != "invisible_collision":
+					st.set_uv(Vector2(Array(pairs.get(k))[1]))
+					# Set the material.
+					if mat_path != "" and !current_material_checked and !current_loaded_material:
+						var n_mat_path: String = mat_path
+						# Fix up material path so it works.
+						if n_mat_path.right(1) != "/":
+							n_mat_path += "/"
+						n_mat_path += tex_name.trim_suffix(tex_name.get_extension()) + "tres"
+						# If we don't have a material loaded, we can check if it exists
+						# and load it. Then we say the material was checked. We only
+						# need to check it once to know if it exists or not.
+						if ResourceLoader.exists(n_mat_path, "Material"):
+							current_loaded_material = load(n_mat_path)
+						current_material_checked = true
+					# We then check if we have a material loaded after that process.
+					if current_loaded_material:
+						st.set_material(current_loaded_material)
+				st.add_vertex(Vector3(Array(pairs.get(k))[0]))
 		st.generate_normals()
 		st.commit(arr_mesh)
 		st.clear()
-		st_has_begun = false
-		arr_mesh.surface_set_name(arr_mesh.get_surface_count() - 1, "invisible_collision")
+		arr_mesh.surface_set_name(arr_mesh.get_surface_count() - 1, tex_name.trim_suffix(tex_name.get_extension()).rstrip("."))
+		current_loaded_material = null
+		current_material_checked = false
 	
 	# Add the mesh to the scene as a MeshInstance3D.
 	var arr_mesh_instance: MeshInstance3D = MeshInstance3D.new() as MeshInstance3D
@@ -328,7 +342,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				new_arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surf_arrays)
 				
 				var coll_body: StaticBody3D = StaticBody3D.new()
-				var coll_body_name: String = arr_mesh.surface_get_name(i) as String
+				var coll_body_name: String = arr_mesh.surface_get_name(i).get_file() as String
 				if !coll_body_name.ends_with("_collision"):
 					coll_body_name += "_collision"
 				coll_body.name = coll_body_name
@@ -361,7 +375,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# If the RMesh has invisible collisions but we choose to ignore them,
 	# we still have to move forward in the file so that we don't read the
 	# wrong data for the entities.
-	if has_invis_coll and !bool(options.get("mesh/include_invisible_collisions")):
+	if has_invis_coll and !include_invis_coll:
 		var invis_coll_vert_count: int = file.get_32() as int
 		for i in invis_coll_vert_count * 3:
 			file.get_32()
@@ -369,75 +383,61 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		for i in invis_coll_tri_count * 3:
 			file.get_32()
 	
-	if bool(options.get("entities/include_entities")):
-		var include_lights: bool = options.get("entities/lights/include_lights") as bool
-		var include_waypoints: bool = options.get("entities/waypoints/include_waypoints") as bool
-		var include_sound_emitters: bool = options.get("entities/sound_emitters/include_sound_emitters") as bool
-		var include_models: bool = options.get("entities/models/include_models") as bool
-		var include_screens: bool = options.get("entities/screens/include_screens") as bool
-		
+	var include_lights: bool = options.get("entities/lights/include_lights") as bool
+	var include_waypoints: bool = options.get("entities/waypoints/include_waypoints") as bool
+	var include_sound_emitters: bool = options.get("entities/sound_emitters/include_sound_emitters") as bool
+	var include_models: bool = options.get("entities/models/include_models") as bool
+	var include_screens: bool = options.get("entities/screens/include_screens") as bool
+	
+	if bool(options.get("entities/include_entities")) and (
+		include_lights or include_waypoints or include_sound_emitters
+		or include_models or include_screens
+	):
 		var lights_folder_node: Node = null
 		var waypoints_folder_node: Node = null
 		var sound_emitters_folder_node: Node = null
 		var models_folder_node: Node = null
 		var screens_folder_node: Node = null
 		
-		if include_lights:
-			lights_folder_node = Node.new() as Node
-			lights_folder_node.name = "lights"
-			saved_scene_root.add_child(lights_folder_node)
-			lights_folder_node.owner = saved_scene_root
-		if include_waypoints:
-			waypoints_folder_node = Node.new() as Node
-			waypoints_folder_node.name = "waypoints"
-			saved_scene_root.add_child(waypoints_folder_node)
-			waypoints_folder_node.owner = saved_scene_root
-		if include_sound_emitters:
-			sound_emitters_folder_node = Node.new() as Node
-			sound_emitters_folder_node.name = "sound_emitters"
-			saved_scene_root.add_child(sound_emitters_folder_node)
-			sound_emitters_folder_node.owner = saved_scene_root
-		if include_models:
-			models_folder_node = Node.new() as Node
-			models_folder_node.name = "models"
-			saved_scene_root.add_child(models_folder_node)
-			models_folder_node.owner = saved_scene_root
-		if include_screens:
-			screens_folder_node = Node.new() as Node
-			screens_folder_node.name = "screens"
-			saved_scene_root.add_child(screens_folder_node)
-			screens_folder_node.owner = saved_scene_root
+		var light_range_scale: float = options.get("entities/lights/light_range_scale") as float
+		var sound_range_scale: float = options.get("entities/sound_emitters/sound_range_scale") as float
 		
 		var ent_count: int = file.get_32() as int
 		for i in ent_count as int:
 			var ent_name: String = read_b3d_string(file) as String
 			match(ent_name):
 				"light":
+					# NOTICE: CBRE-EX doesn't distinguish between normal lights and
+					# spotlights when exporting. All imported lights will always
+					# be OmniLight3Ds, never SpotLight3D. Also, lighting will always
+					# look different with imported lights than how it looks in CBRE-EX.
+					# The lights receive their color, range and intensity (energy) values,
+					# but you will have to tweak them more if you want to get them to look
+					# the same (or almost the same) as in CBRE-EX.
+					
+					# Get light position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
+					var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
+					var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get light range. 4-byte float.
+					var range: float = file.get_float() * float() as float
+					
+					# Get light color string.
+					var color_string = read_b3d_string(file) as String
+					var split_color_string: PackedStringArray = color_string.split(" ") as PackedStringArray
+					var actual_color = Color8(int(split_color_string[0]), int(split_color_string[1]), int(split_color_string[2]))
+					
+					# Get light intensity. 4-byte float.
+					var intensity: float = file.get_float() as float
+					
 					if include_lights:
-						# NOTICE: CBRE-EX doesn't distinguish between normal lights and
-						# spotlights when exporting. All imported lights will always
-						# be OmniLight3Ds, never SpotLight3D. Also, lighting will always
-						# look different with imported lights than how it looks in CBRE-EX.
-						# The lights receive their color, range and intensity (energy) values,
-						# but you will have to tweak them more if you want to get them to look
-						# the same (or almost the same) as in CBRE-EX.
-						
-						# Get light position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
-						var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
-						var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")) as Vector3
-						
-						# Get light range. 4-byte float.
-						var range: float = file.get_float() * float(options.get("entities/lights/light_range_scale")) as float
-						
-						# Get light color string.
-						var color_string = read_b3d_string(file) as String
-						var split_color_string: PackedStringArray = color_string.split(" ") as PackedStringArray
-						var actual_color = Color8(int(split_color_string[0]), int(split_color_string[1]), int(split_color_string[2]))
-						
-						# Get light intensity. 4-byte float.
-						var intensity: float = file.get_float() as float
+						if !lights_folder_node:
+							lights_folder_node = Node.new() as Node
+							lights_folder_node.name = "lights"
+							saved_scene_root.add_child(lights_folder_node)
+							lights_folder_node.owner = saved_scene_root
 						
 						var light_node: OmniLight3D = OmniLight3D.new()
 						light_node.name = "light"
@@ -448,61 +448,80 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						lights_folder_node.add_child(light_node, true)
 						light_node.owner = saved_scene_root
 				"waypoint":
+					# Get waypoint position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
+					var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
+					var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
 					if include_waypoints:
-						# Get waypoint position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
-						var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
-						var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")) as Vector3
+						if !waypoints_folder_node:
+							waypoints_folder_node = Node.new() as Node
+							waypoints_folder_node.name = "waypoints"
+							saved_scene_root.add_child(waypoints_folder_node)
+							waypoints_folder_node.owner = saved_scene_root
 						
-						var waypoint_node: Node3D = Node3D.new()
+						var waypoint_node: Node3D = Node3D.new() as Node3D
 						waypoint_node.name = "waypoint"
 						waypoint_node.position = pos
 						waypoints_folder_node.add_child(waypoint_node, true)
 						waypoint_node.owner = saved_scene_root
 				"soundemitter":
+					# Get sound emitter position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
+					var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
+					var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get ambience index. 4-byte int.
+					var amb_ind: int = file.get_32() as int
+					
+					# Get soundemitter range. 4-byte float.
+					var range: float = file.get_float() as float
+					
 					if include_sound_emitters:
-						# Get sound emitter position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
-						var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
-						var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")) as Vector3
+						if !sound_emitters_folder_node:
+							sound_emitters_folder_node = Node.new() as Node
+							sound_emitters_folder_node.name = "sound_emitters"
+							saved_scene_root.add_child(sound_emitters_folder_node)
+							sound_emitters_folder_node.owner = saved_scene_root
 						
-						# Get ambience index. 4-byte int.
-						var amb_ind: int = file.get_32() as int
-						
-						# Get soundemitter range. 4-byte float.
-						var range: float = file.get_float() as float
-						
-						var emitter_node: Node3D = Node3D.new()
+						var emitter_node: AudioStreamPlayer3D = AudioStreamPlayer3D.new() as AudioStreamPlayer3D
 						emitter_node.name = "soundemitter"
 						emitter_node.position = pos
+						emitter_node.max_distance = range * sound_range_scale
 						sound_emitters_folder_node.add_child(emitter_node, true)
 						emitter_node.owner = saved_scene_root
 				"model":
+					# Get model file path.
+					var model_path: String = read_b3d_string(file) as String
+					
+					# Get model position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
+					var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
+					var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get model rotation. Each X, Y and Z rotation is a 4-byte float.
+					var rot_x: float = file.get_float() as float # CBRE-EX 'X' rotation
+					var rot_y: float = file.get_float() as float # CBRE-EX 'Z' rotation
+					var rot_z: float = file.get_float() as float # CBRE-EX 'Y' rotation
+					var rot: Vector3 = Vector3(rot_x, rot_y, -rot_z) as Vector3
+					
+					# Get model scale. Each X, Y and Z scale is a 4-byte float.
+					var scale_x: float = file.get_float() as float # CBRE-EX 'X' scale
+					var scale_y: float = file.get_float() as float # CBRE-EX 'Z' scale
+					var scale_z: float = file.get_float() as float # CBRE-EX 'Y' scale
+					var scale: Vector3 = Vector3(scale_x, scale_y, -scale_z) as Vector3
+					
 					if include_models:
-						# Get model file path.
-						var model_path: String = read_b3d_string(file) as String
+						if !models_folder_node:
+							models_folder_node = Node.new() as Node
+							models_folder_node.name = "models"
+							saved_scene_root.add_child(models_folder_node)
+							models_folder_node.owner = saved_scene_root
 						
-						# Get model position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
-						var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
-						var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")) as Vector3
-						
-						# Get model rotation. Each X, Y and Z rotation is a 4-byte float.
-						var rot_x: float = file.get_float() as float # CBRE-EX 'X' rotation
-						var rot_y: float = file.get_float() as float # CBRE-EX 'Z' rotation
-						var rot_z: float = file.get_float() as float # CBRE-EX 'Y' rotation
-						var rot: Vector3 = Vector3(rot_x, rot_y, -rot_z) as Vector3
-						
-						# Get model scale. Each X, Y and Z scale is a 4-byte float.
-						var scale_x: float = file.get_float() as float # CBRE-EX 'X' scale
-						var scale_y: float = file.get_float() as float # CBRE-EX 'Z' scale
-						var scale_z: float = file.get_float() as float # CBRE-EX 'Y' scale
-						var scale: Vector3 = Vector3(scale_x, scale_y, -scale_z) as Vector3
-						
-						var model_node: Node3D = Node3D.new()
+						var model_node: Node3D = Node3D.new() as Node3D
 						model_node.name = "model"
 						model_node.position = pos
 						model_node.rotation_degrees = rot
@@ -510,17 +529,23 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						models_folder_node.add_child(model_node, true)
 						model_node.owner = saved_scene_root
 				"screen":
+					# Get screen position. Each X, Y and Z position is a 4-byte float.
+					var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
+					var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
+					var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
+					var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * scale_mesh as Vector3
+					
+					# Get screen image file path.
+					var img_path: String = read_b3d_string(file) as String
+					
 					if include_screens:
-						# Get screen position. Each X, Y and Z position is a 4-byte float.
-						var pos_x: float = file.get_float() as float # CBRE-EX 'X' position
-						var pos_y: float = file.get_float() as float # CBRE-EX 'Z' position
-						var pos_z: float = file.get_float() as float # CBRE-EX 'Y' position
-						var pos: Vector3 = Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")) as Vector3
+						if !screens_folder_node:
+							screens_folder_node = Node.new() as Node
+							screens_folder_node.name = "screens"
+							saved_scene_root.add_child(screens_folder_node)
+							screens_folder_node.owner = saved_scene_root
 						
-						# Get screen image file path.
-						var img_path: String = read_b3d_string(file) as String
-						
-						var screen_node: Node3D = Node3D.new()
+						var screen_node: Node3D = Node3D.new() as Node3D
 						screen_node.name = "screen"
 						screen_node.position = pos
 						screens_folder_node.add_child(screen_node, true)

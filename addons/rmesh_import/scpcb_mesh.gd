@@ -72,6 +72,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	if header != "RoomMesh" and header != "RoomMesh.HasTriggerBox":
 		return ERR_FILE_UNRECOGNIZED
 	
+	var scale_mesh: Vector3 = options.get("mesh/scale_mesh") as Vector3
+	
 	var saved_scene_root: Node3D = Node3D.new()
 	var saved_scene_root_name: String = source_file.get_file().trim_suffix(".rmesh").rstrip(".") as String
 	saved_scene_root.name = saved_scene_root_name
@@ -132,7 +134,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var pos_y: float = vertex_data.decode_float(4)
 			var pos_z: float = vertex_data.decode_float(8)
 			# I guess the positive Z direction is still flipped though.
-			vertices.append(Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")))
+			vertices.append(Vector3(pos_x, pos_y, -pos_z) * scale_mesh)
 			
 			# Get the texture and lightmap UVs.
 			var texU = vertex_data.decode_float(12)
@@ -206,7 +208,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var pos_x: float = invis_coll_vertex_data.decode_float(0)
 			var pos_y: float = invis_coll_vertex_data.decode_float(4)
 			var pos_z: float = invis_coll_vertex_data.decode_float(8)
-			invis_coll_vertices.append(Vector3(pos_x, pos_y, -pos_z) * Vector3(options.get("mesh/scale_mesh")))
+			invis_coll_vertices.append(Vector3(pos_x, pos_y, -pos_z) * scale_mesh)
 			
 			# The data for each invisible collision vertex doesn't end with any extra bytes.
 		
@@ -273,7 +275,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						# Fix up material path so it works.
 						if n_mat_path.right(1) != "/":
 							n_mat_path += "/"
-							n_mat_path += tex_name.trim_suffix(tex_name.get_extension()) + "tres"
+						n_mat_path += tex_name.trim_suffix(tex_name.get_extension()) + "tres"
 						# If we don't have a material loaded, we can check if it exists
 						# and load it. Then we say the material was checked. We only
 						# need to check it once to know if it exists or not.
