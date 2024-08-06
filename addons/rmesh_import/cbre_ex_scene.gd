@@ -1,3 +1,4 @@
+# https://github.com/AnalogFeelings/cbre-ex/blob/main/Source/CBRE.Editor/Compiling/RMeshExport.cs
 @tool
 extends EditorImportPlugin
 
@@ -162,8 +163,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# Get the vertices.
 		var vertices: PackedVector3Array = PackedVector3Array() as PackedVector3Array
 		for j in vertex_count:
-			# The actual data for each vertex takes up 28 bytes.
-			var vertex_data: PackedByteArray = file.get_buffer(28) as PackedByteArray
+			# The data for each vertex takes up 31 bytes.
+			var vertex_data: PackedByteArray = file.get_buffer(31) as PackedByteArray
 			
 			# Each vertex X, Y and Z position takes up 4 bytes.
 			# In CBRE-EX, X and Y are horizontal positions, while Z is vertical.
@@ -185,8 +186,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			tex_uvs.append(Vector2(texU, texV))
 			lm_uvs.append(Vector2(lmU, lmV))
 			
-			# The data for each vertex ends with three FF bytes.
-			file.get_buffer(3)
+			# The data for each vertex ends with three 'RGB' bytes. Usually, they
+			# are just three FF bytes. We don't really care about these.
 		
 		# Get the triangle count.
 		var tri_count: int = file.get_32() as int
