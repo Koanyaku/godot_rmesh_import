@@ -4,26 +4,34 @@ extends EditorImportPlugin
 
 enum PRESETS { DEFAULT }
 
+
 func _get_importer_name() -> String:
 	return "rmesh.scpcb.mesh"
+
 
 func _get_visible_name() -> String:
 	return "SCP – CB RMesh as Mesh"
 
+
 func _get_recognized_extensions() -> PackedStringArray:
 	return ["rmesh"]
+
 
 func _get_save_extension() -> String:
 	return "mesh"
 
+
 func _get_priority() -> float:
 	return 1.0
+
 
 func _get_resource_type() -> String:
 	return "Mesh"
 
+
 func _get_preset_count():
 	return PRESETS.size()
+
 
 func _get_preset_name(preset_index) -> String:
 	match preset_index:
@@ -34,6 +42,7 @@ func _get_preset_name(preset_index) -> String:
 
 func _get_import_order() -> ImportOrder:
 	return IMPORT_ORDER_DEFAULT
+
 
 func _get_import_options(path, preset_index) -> Array[Dictionary]:
 	match preset_index:
@@ -57,8 +66,10 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 		_:
 			return []
 
+
 func _get_option_visibility(path: String, option_name: StringName, options: Dictionary) -> bool:
 	return true
+
 
 func _import(source_file: String, save_path: String, options: Dictionary, platform_variants: Array[String], gen_files: Array[String]) -> Error:
 	var file: FileAccess = FileAccess.open(source_file, FileAccess.READ)
@@ -295,7 +306,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	return ResourceSaver.save(arr_mesh, "%s.%s" % [save_path, _get_save_extension()])
 
+
 func read_b3d_string(file: FileAccess) -> String:
 	var len: int = file.get_32() as int
 	var string: String = file.get_buffer(len).get_string_from_utf8()
 	return string
+
