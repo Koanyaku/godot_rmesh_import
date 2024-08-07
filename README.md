@@ -17,12 +17,10 @@ This addon allows you to import this ancient file format officially supported by
 - Entity importing.
 - Lightmaps aren't supported. Instead, you can import light entities.<br><br>
 
-I highly suggest checking out the addon's [**docs folder**](docs/), as you will find all information about the features there! (and also some extra stuff..!) You can also just go there from this list.
+I highly suggest checking out these links, as you will find all information about the features there!
 
 - [Importing SCP – Containment Breach .rmesh files](docs/importing_scp-cb_files.md)
-- [Importing CBRE-EX .rmesh files](docs/importing_cbre-ex_files.md)
-- [SCP – Containment Breach RMesh file format](docs/rmesh_format_scp-cb.md)
-- [CBRE-EX RMesh file format](docs/rmesh_format_cbre-ex.md)<br><br>
+- [Importing CBRE-EX .rmesh files](docs/importing_cbre-ex_files.md)<br><br>
 
 Now, go wild! **_BUT!_** Read this first:
 
