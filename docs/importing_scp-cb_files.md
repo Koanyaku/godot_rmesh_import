@@ -72,7 +72,7 @@ When you select "**SCP – CB RMesh as PackedScene**" in the import tab, you wil
 
 ---
 
-2. **Collision category:**:
+2. **Collision category:**
 
     - Generate Collision Mesh
     
@@ -154,7 +154,7 @@ When you select "**SCP – CB RMesh as PackedScene**" in the import tab, you wil
             
                 - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, sound emitters get imported as [AudioStreamPlayer3D](https://docs.godotengine.org/en/stable/classes/class_audiostreamplayer3d.html)s (classname "soundemitter" in the RMesh file).<br><br>
             
-                > ⚠️ SCP – CB uses "sound IDs" to play back sounds through the sound emitters, but since this wouldn't work in Godot by default, this value is not used, and the AudioStreamPlayer3Ds are given no sounds.
+                > ⚠️ **SCP – CB uses "sound IDs" to play back sounds through the sound emitters, but since this wouldn't work in Godot by default, this value is not used, and the AudioStreamPlayer3Ds are given no sounds.**
             
             - Sound Range Scale
             
