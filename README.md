@@ -3,7 +3,7 @@
 
 &nbsp;
 
-## Godot 4.2.2 Importer for RoomMesh (.rmesh) files.
+## Godot 4.2+ Importer for RoomMesh (.rmesh) files.
 
 Have you ever played [SCP – Containment Breach](https://scpcbgame.com/)? Have you ever thought _"Hmm... I want to get these rooms into Godot, but they're in this weird .rmesh file format."_? If so, then this addon is just the thing you need!
 
