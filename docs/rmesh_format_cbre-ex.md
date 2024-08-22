@@ -105,10 +105,13 @@ For each vertice, some data gets stored. This data _always_ takes up 31 bytes.
 4-byte 'Decimal' type, representing the vertex' X position (in CBRE-EX).
 4-byte 'Decimal' type, representing the vertex' Z position (in CBRE-EX).
 4-byte 'Decimal' type, representing the vertex' Y position (in CBRE-EX).
+
 4-byte 'Single' type, representing the U value of the texture's UV values.
 4-byte 'Single' type, representing the V value of the texture's UV values.
+
 4-byte 'Single' type, representing the U value of the lightmap texture's UV values.
 4-byte 'Single' type, representing the V value of the lightmap texture's UV values.
+
 Three filler bytes. These are supposed to be the vertex' vertex colors, but they are always stored as 255 (FF).
 ```
 
@@ -151,10 +154,13 @@ For each vertice, some data gets stored. This data _always_ takes up 31 bytes.
 4-byte 'Decimal' type, representing the vertex' X position (in CBRE-EX).
 4-byte 'Decimal' type, representing the vertex' Z position (in CBRE-EX).
 4-byte 'Decimal' type, representing the vertex' Y position (in CBRE-EX).
+
 4-byte 'Single' type, representing the U value of the texture's UV values.
 4-byte 'Single' type, representing the V value of the texture's UV values.
+
 4-byte 'Single' type, representing the U value of the lightmap texture's UV values. This value is always 0.0.
 4-byte 'Single' type, representing the V value of the lightmap texture's UV values. This value is always 0.0.
+
 Three filler bytes. These are supposed to be the vertex' vertex colors, but they are always stored as 255 (FF).
 ```
 
