@@ -1,7 +1,9 @@
 
-# SCP – Containment Breach RMesh file format
+# CBRE-EX RMesh file format
 
-This document explains how RMesh files from SCP – Containment Breach are stored internally. The files in question are from **SCP – Containment Breach v1.3.11**.
+This document explains how RMesh files exported by CBRE-EX are stored internally. The files in question are exported from **CBRE-EX v2.1.0**.
+
+This document expects that you understand the basics C# data types, as CBRE-EX is written in C#.
 
 **Note:** Non-representable characters in hex-to-text examples have been replaced with periods. The parts of hex code which are of main focus are enclosed in >[ ]<.
 
@@ -17,47 +19,39 @@ Text: ....RoomMesh
 
 >[08 00 00 00]< 52 6F 6F 6D 4D 65 73 68
 
-4-byte 'int' value representing the string's length in bytes. In this case, 8.
+4-byte 'UInt32' value representing the string's length in bytes. In this case, 8.
 
 08 00 00 00 >[52 6F 6F 6D 4D 65 73 68]<
 
-Variable-byte 'string' value, which is the string itself. In this case, 'RoomMesh'.
+Variable-byte 'String' value, which is the string itself. In this case, 'RoomMesh'.
 ```
 
-Now, we can finally look onto how the RMesh files are stored.
+Now, we can finally look onto how CBRE-EX writes the files.
 
 ## File structure
 
-At the file's start, a B3D string header is written. This is always either 'RoomMesh' or 'RoomMesh.HasTriggerBox' if the map contains triggers boxes.
+At the file's start, a B3D string header is written. This is always 'RoomMesh'.
 
 ```
-Hex: >[08 00 00 00 52 6F 6F 6D 4D 65 73 68]< 0D 00 00 00
-Text: ....RoomMesh....
-
-Without trigger boxes.
-```
-
-```
-Hex: >[16 00 00 00 52 6F 6F 6D 4D 65 73 68 2E 48 61 73 54 72 69 67 67 65 72 42 6F 78]< 28 00
-Text: ....RoomMesh.HasTriggerBox(.
-
-With trigger boxes.
+Hex: >[08 00 00 00 52 6F 6F 6D 4D 65 73 68]< 04 00 00 00 01 0F 00
+Text: ....RoomMesh.......
 ```
 
 After the header, the map's texture count is stored. This is the number of unique textures the map contains.
 
 ```
-Hex: 4D 65 73 68 >[0D 00 00 00]< 02 10 00 00
-Text: Mesh........
+Hex: 52 6F 6F 6D 4D 65 73 68 >[04 00 00 00]< 01 0F 00
+Text: RoomMesh.......
 
-4-byte 'int' value representing the unique texture count. In this case, 13.
+4-byte 'Int32' value representing the unique texture count. In this case, 4.
 ```
 
-Next, for each unique texture, the data for all faces with that texture is stored. SCP – CB handles opaque and transparent textures differently. First, we need to understand what different 'texture flags' represent. These are taken from SCP – CB's code comments.
+Next, for each unique texture, CBRE-EX gets all faces with that texture and starts writing their data. CBRE-EX handles opaque and transparent textures differently. First, we need to understand what different 'texture flags' represent. These are taken from SCP – CB's code comments.
 
 ```
 Texture flags:
 
+0 – The texture is not included.
 1 – The texture is opaque (non-transparent).
 2 – The texture is a lightmap texture.
 3 – The texture has transparency.
@@ -68,65 +62,63 @@ Texture flags:
 ### **How opaque textures are handled:**
 
 For every opaque texture, a lightmap is generated.
-First, a 1-byte 'Byte' value gets stored, which is the lightmap's texture flag.
+First, a 1-byte 'Byte' value gets stored, which is the lightmap's texture flag. This flag is _always_ 1.
 
 ```
-Hex: 0D 00 00 00 >[02]< 10 00 00 00 72 6F 6F 6D 34
-Text: .........room4
-
-In this case, the flag is 2, meaning the texture is a lightmap.
+Hex: 65 73 68 04 00 00 00 >[01]< 0F 00 00 00
+Text: Mesh.........
 ```
 
 Then, the lightmap texture's path relative to the .rmesh file's directory is stored as a B3D string.
 
 ```
-Hex: 02 >[10 00 00 00 72 6F 6F 6D 34 70 69 74 5F 6C 6D 31 2E 70 6E 67]< 01 11
-Text: .....room4pit_lm1.png..
+Hex: 00 00 01 >[0F 00 00 00 74 65 73 74 72 6F 6F 6D 5F 6C 6D 2E 70 6E 67]< 01 11
+Text: .......testroom_lm.png..
 ```
 
-After that, the same is done for the actual texture. A 1-byte 'Byte' value is stored, which is the actual texture's texture flag.
+After that, the same is done for the actual texture. A 1-byte 'Byte' value is stored, which is the actual texture's texture flag. This flag is _always_ 1. 
 
 ```
-Hex: 6C 6D 31 2E 70 6E 67 >[01]< 11 00 00 00 63 6F 6E 63 72
-Text: lm1.png.....concr
+Hex: 6C 6D 2E 70 6E 67 >[01]< 11 00 00 00
+Text: lm.png.....
 ```
 
-Then, the texture path is stored as a B3D string.
+Then, the texture's path relative to the .rmesh file's directory is stored as a B3D string.
 
 ```
-Hex: 01 >[11 00 00 00 63 6F 6E 63 72 65 74 65 66 6C 6F 6F 72 2E 6A 70 67]< F0 00
-Text: .....concretefloor.jpgð.
+Hex: 6E 67 01 >[11 00 00 00 6D 61 70 2F 74 69 6C 65 66 6C 6F 6F 72 2E 6A 70 67]< 14 00
+Text: ng.....map/tilefloor.jpg..
 ```
 
-Next, the amount of vertices that are associated with the texture is stored.
+Next, CBRE-EX adds up all the vertices that are associated with the texture and stores the amount.
 
 ```
-Hex: 6F 72 2E 6A 70 67 F0 00 00 00 00 00 80 44
-Text: or.jpgð.....€D
+Hex: 6F 72 2E 6A 70 67 >[14 00 00 00]< 00 00 C0 C2
+Text: or.jpg......ÀÂ
 
-4-byte 'int' value representing the vertex count. In this case, 240.
+4-byte 'Int32' value representing the vertex count. In this case, 20.
 ```
 
 For each vertice, some data gets stored. This data _always_ takes up 31 bytes.
 
 ```
-4-byte 'float' value, representing the vertex' X position (in SCP – CB).
-4-byte 'float' value, representing the vertex' Y position (in SCP – CB).
-4-byte 'float' value, representing the vertex' Z position (in SCP – CB).
+4-byte 'Decimal' type, representing the vertex' X position (in CBRE-EX).
+4-byte 'Decimal' type, representing the vertex' Z position (in CBRE-EX).
+4-byte 'Decimal' type, representing the vertex' Y position (in CBRE-EX).
 
-4-byte 'float' value, representing the U value of the texture's UV values.
-4-byte 'float' value, representing the V value of the texture's UV values.
+4-byte 'Single' type, representing the U value of the texture's UV values.
+4-byte 'Single' type, representing the V value of the texture's UV values.
 
-4-byte 'float' value, representing the U value of the lightmap texture's UV values.
-4-byte 'float' value, representing the V value of the lightmap texture's UV values.
+4-byte 'Single' type, representing the U value of the lightmap texture's UV values.
+4-byte 'Single' type, representing the V value of the lightmap texture's UV values.
 
-Three 1-byte values. These are the vertex' vertex colors.
+Three filler bytes. These are supposed to be the vertex' vertex colors, but they are always stored as 255 (FF).
 ```
 
 ### **How transparent textures are handled:**
 
 For transparent textures, a lightmap is _not_ generated.
-First, a 1-byte 'Byte' value gets stored, which is the lightmap's texture flag. This flag is _always_ 1.
+First, a 1-byte 'Byte' value gets stored, which is the lightmap's texture flag. This flag is _always_ 0.
 
 ```
 Hex: 06 00 00 00 07 00 00 00 >[00]< 03 0D 00 00 00 6D 61 70 2F
@@ -159,15 +151,15 @@ Text: or.jpg......ÀÂ
 For each vertice, some data gets stored. This data _always_ takes up 31 bytes.
 
 ```
-4-byte 'float' value, representing the vertex' X position (in SCP – CB).
-4-byte 'float' value, representing the vertex' Y position (in SCP – CB).
-4-byte 'float' value, representing the vertex' Z position (in SCP – CB).
+4-byte 'Decimal' type, representing the vertex' X position (in CBRE-EX).
+4-byte 'Decimal' type, representing the vertex' Z position (in CBRE-EX).
+4-byte 'Decimal' type, representing the vertex' Y position (in CBRE-EX).
 
-4-byte 'float' value, representing the U value of the texture's UV values.
-4-byte 'float' value, representing the V value of the texture's UV values.
+4-byte 'Single' type, representing the U value of the texture's UV values.
+4-byte 'Single' type, representing the V value of the texture's UV values.
 
-4-byte 'float' value, representing the U value of the lightmap texture's UV values. This value is always 0.0.
-4-byte 'float' value, representing the V value of the lightmap texture's UV values. This value is always 0.0.
+4-byte 'Single' type, representing the U value of the lightmap texture's UV values. This value is always 0.0.
+4-byte 'Single' type, representing the V value of the lightmap texture's UV values. This value is always 0.0.
 
 Three filler bytes. These are supposed to be the vertex' vertex colors, but they are always stored as 255 (FF).
 ```
