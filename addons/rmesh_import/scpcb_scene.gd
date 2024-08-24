@@ -522,13 +522,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		include_screens or include_waypoints or include_lights or include_spotlights
 		or include_sound_emitters or include_player_starts or include_models
 	):
-		var screens_folder_node: Node = null
-		var waypoints_folder_node: Node = null
-		var lights_folder_node: Node = null
-		var spotlights_folder_node: Node = null
-		var sound_emitters_folder_node: Node = null
-		var player_starts_folder_node: Node = null
-		var models_folder_node: Node = null
+		var screens_folder_node: Node3D = null
+		var waypoints_folder_node: Node3D = null
+		var lights_folder_node: Node3D = null
+		var spotlights_folder_node: Node3D = null
+		var sound_emitters_folder_node: Node3D = null
+		var player_starts_folder_node: Node3D = null
+		var models_folder_node: Node3D = null
 		
 		var light_range_scale: float = options.get("entities/lights/light_range_scale") as float
 		var spotlight_range_scale: float = options.get("entities/spotlights/spotlight_range_scale") as float
@@ -550,7 +550,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if include_screens:
 						if !screens_folder_node:
-							screens_folder_node = Node.new() as Node
+							screens_folder_node = Node3D.new() as Node3D
 							screens_folder_node.name = "screens"
 							saved_scene_root.add_child(screens_folder_node)
 							screens_folder_node.owner = saved_scene_root
@@ -569,7 +569,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if include_waypoints:
 						if !waypoints_folder_node:
-							waypoints_folder_node = Node.new() as Node
+							waypoints_folder_node = Node3D.new() as Node3D
 							waypoints_folder_node.name = "waypoints"
 							saved_scene_root.add_child(waypoints_folder_node)
 							waypoints_folder_node.owner = saved_scene_root
@@ -604,7 +604,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if include_lights:
 						if !lights_folder_node:
-							lights_folder_node = Node.new() as Node
+							lights_folder_node = Node3D.new() as Node3D
 							lights_folder_node.name = "lights"
 							saved_scene_root.add_child(lights_folder_node)
 							lights_folder_node.owner = saved_scene_root
@@ -652,7 +652,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if include_spotlights:
 						if !spotlights_folder_node:
-							spotlights_folder_node = Node.new() as Node
+							spotlights_folder_node = Node3D.new() as Node3D
 							spotlights_folder_node.name = "spotlights"
 							saved_scene_root.add_child(spotlights_folder_node)
 							spotlights_folder_node.owner = saved_scene_root
@@ -682,7 +682,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if include_sound_emitters:
 						if !sound_emitters_folder_node:
-							sound_emitters_folder_node = Node.new() as Node
+							sound_emitters_folder_node = Node3D.new() as Node3D
 							sound_emitters_folder_node.name = "sound_emitters"
 							saved_scene_root.add_child(sound_emitters_folder_node)
 							sound_emitters_folder_node.owner = saved_scene_root
@@ -707,7 +707,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if include_player_starts:
 						if !player_starts_folder_node:
-							player_starts_folder_node = Node.new() as Node
+							player_starts_folder_node = Node3D.new() as Node3D
 							player_starts_folder_node.name = "player_starts"
 							saved_scene_root.add_child(player_starts_folder_node)
 							player_starts_folder_node.owner = saved_scene_root
@@ -742,7 +742,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if include_models:
 						if !models_folder_node:
-							models_folder_node = Node.new() as Node
+							models_folder_node = Node3D.new() as Node3D
 							models_folder_node.name = "models"
 							saved_scene_root.add_child(models_folder_node)
 							models_folder_node.owner = saved_scene_root
@@ -767,4 +767,3 @@ func read_b3d_string(file: FileAccess) -> String:
 	var len: int = file.get_32() as int
 	var string: String = file.get_buffer(len).get_string_from_utf8()
 	return string
-
