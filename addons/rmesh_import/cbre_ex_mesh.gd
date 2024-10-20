@@ -73,19 +73,26 @@ func _get_option_visibility(path: String, option_name: StringName, options: Dict
 
 
 func _import(source_file: String, save_path: String, options: Dictionary, platform_variants: Array[String], gen_files: Array[String]) -> Error:
-	var file: FileAccess = FileAccess.open(source_file, FileAccess.READ)
-	if !file:
+	var file: FileAccess = FileAccess.open(
+		source_file, FileAccess.READ
+	)
+	if not file:
 		return FileAccess.get_open_error()
 	
 	# Get the header.
 	var header: String = read_b3d_string(file) as String
-	if header != "RoomMesh":
+	if not header == "RoomMesh":
 		return ERR_FILE_UNRECOGNIZED
 	
-	var scale_mesh: Vector3 = options.get("mesh/scale_mesh") as Vector3
+	var scale_mesh: Vector3 = options.get(
+		"mesh/scale_mesh"
+	) as Vector3
 	
 	var saved_scene_root: Node3D = Node3D.new()
-	var saved_scene_root_name: String = source_file.get_file().trim_suffix(".rmesh").rstrip(".") as String
+	var saved_scene_root_name: String = (
+		source_file.get_file()
+		.trim_suffix(".rmesh")
+	) as String
 	saved_scene_root.name = saved_scene_root_name
 	
 	# Get the texture count.
@@ -120,10 +127,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		var lm_uvs: Array
 		
 		# Get the vertices.
-		var vertices: PackedVector3Array = PackedVector3Array() as PackedVector3Array
+		var vertices: PackedVector3Array = PackedVector3Array()
 		for j in vertex_count:
 			# The data for each vertex takes up 31 bytes.
-			var vertex_data: PackedByteArray = file.get_buffer(31) as PackedByteArray
+			var vertex_data: PackedByteArray = file.get_buffer(31)
 			
 			# Each vertex X, Y and Z position takes up 4 bytes.
 			# In CBRE-EX, X and Y are horizontal positions, while Z is vertical.
@@ -135,7 +142,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var pos_z: float = vertex_data.decode_float(8) # CBRE-EX 'Y' position
 			# In CBRE-EX, the positive 'Y' axis (Godot's positive Z axis) is in the opposite 
 			# direction to Godot's positive Z axis, so we have to flip it here.
-			vertices.append(Vector3(pos_x, pos_y, -pos_z) * scale_mesh)
+			vertices.append(
+				Vector3(pos_x, pos_y, -pos_z)
+				* scale_mesh
+			)
 			
 			# Get the texture and lightmap UVs.
 			var texU = vertex_data.decode_float(12)
@@ -152,7 +162,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		var tri_count: int = file.get_32() as int
 		
 		# Get the triangle indices.
-		var tri_indices: PackedInt32Array = PackedInt32Array() as PackedInt32Array
+		var tri_indices: PackedInt32Array = PackedInt32Array()
 		for j in tri_count * 3:
 			# Each indice is stored as 4 bytes.
 			tri_indices.append(file.get_32() as int)
@@ -188,7 +198,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		})
 	
 	var has_invis_coll: bool = file.get_32() as bool
-	var include_invis_coll: bool = options.get("mesh/include_invisible_collisions") as bool
+	var include_invis_coll: bool = options.get(
+		"mesh/include_invisible_collisions"
+	) as bool
 	
 	# Handle invisible collisions. We mostly have to repeat the same processes
 	# as with the normal face data.
@@ -198,41 +210,48 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		var invis_coll_vert_count: int = file.get_32() as int
 		
 		# Get the invisible collision vertices.
-		var invis_coll_vertices: PackedVector3Array = PackedVector3Array() as PackedVector3Array
+		var invis_coll_vertices: PackedVector3Array = PackedVector3Array()
 		for i in invis_coll_vert_count:
 			# The actual data for each invisible collision vertex takes up 12 bytes.
 			# Only the X, Y and Z positions get saved with invisible collision vertices.
 			# Other than that, we do mostly the same things as with normal face vertices.
-			var invis_coll_vertex_data: PackedByteArray = file.get_buffer(12) as PackedByteArray
+			var invis_coll_vertex_data: PackedByteArray = (
+				file.get_buffer(12)
+			)
 			
 			var pos_x: float = invis_coll_vertex_data.decode_float(0) # CBRE-EX 'X' position
 			var pos_y: float = invis_coll_vertex_data.decode_float(4) # CBRE-EX 'Z' position
 			var pos_z: float = invis_coll_vertex_data.decode_float(8) # CBRE-EX 'Y' position
-			invis_coll_vertices.append(Vector3(pos_x, pos_y, -pos_z) * scale_mesh)
+			invis_coll_vertices.append(
+				Vector3(pos_x, pos_y, -pos_z)
+				* scale_mesh
+			)
 			
 			# The data for each invisible collision vertex doesn't end with any extra bytes.
 		
 		# Get the invisible collision triangle count.
-		var invis_coll_tri_count: int = file.get_32() as int
+		var invis_coll_tri_count: int = file.get_32()
 		
 		# Get the invisible collision triangle indices.
-		var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array() as PackedInt32Array
+		var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array()
 		for i in invis_coll_tri_count * 3:
 			# Each indice is stored as 4 bytes.
-			invis_coll_tri_indices.append(file.get_32() as int)
+			invis_coll_tri_indices.append(file.get_32())
 		
 		# The triangle indice count must be a multiple of the triangle count.
 		if invis_coll_tri_indices.size() % invis_coll_tri_count:
 			return FAILED
 		
 		# For each invisible collision indice, give it it's corresponding vertex.
-		var invis_coll_vert_ind_pairs: Dictionary = {} as Dictionary
-		var pos_in_invis_coll_ind_arr: int = -1 as int
-		for i in invis_coll_tri_indices.size() as int:
+		var invis_coll_vert_ind_pairs: Dictionary = {}
+		var pos_in_invis_coll_ind_arr: int = -1
+		for i in invis_coll_tri_indices.size():
 			pos_in_invis_coll_ind_arr += 1
 			# If an indice already has vertex data associated with it, 
 			# we know we can just skip it.
-			if !invis_coll_vert_ind_pairs.has(invis_coll_tri_indices[i]):
+			if !invis_coll_vert_ind_pairs.has(
+				invis_coll_tri_indices[i]
+			):
 				invis_coll_vert_ind_pairs[invis_coll_tri_indices[i]] = [
 					invis_coll_vertices[pos_in_invis_coll_ind_arr]
 				]
@@ -240,19 +259,23 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				pos_in_invis_coll_ind_arr -= 1
 		
 		# Every invisible collision vertex should have only one indice associated with it.
-		if invis_coll_vert_ind_pairs.size() != invis_coll_vertices.size():
+		if not invis_coll_vert_ind_pairs.size() == invis_coll_vertices.size():
 			return FAILED
 		
-		Array(tex_dict.get("invisible_collision")).append({
-			"indices": invis_coll_tri_indices,
-			"pairs": invis_coll_vert_ind_pairs
-		})
+		Array(tex_dict.get("invisible_collision")).append(
+			{
+				"indices": invis_coll_tri_indices,
+				"pairs": invis_coll_vert_ind_pairs
+			}
+		)
 	
 	# Initialize the ArrayMesh and SurfaceTool.
 	var arr_mesh: ArrayMesh = ArrayMesh.new() as ArrayMesh
 	var st: SurfaceTool = SurfaceTool.new() as SurfaceTool
 	
-	var mat_path: String = options.get("materials/material_path") as String
+	var mat_path: String = options.get(
+		"materials/material_path"
+	) as String
 	var current_material_checked: bool = false as bool
 	var current_loaded_material: Material = null
 	
@@ -270,12 +293,18 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				if tex_name != "invisible_collision":
 					st.set_uv(Vector2(Array(pairs.get(k))[1]))
 					# Set the material.
-					if mat_path != "" and !current_material_checked and !current_loaded_material:
+					if (
+						not mat_path == ""
+						and not current_material_checked 
+						and not current_loaded_material
+					):
 						var n_mat_path: String = mat_path
 						# Fix up material path so it works.
 						if n_mat_path.right(1) != "/":
 							n_mat_path += "/"
-						n_mat_path += tex_name.trim_suffix(tex_name.get_extension()) + "tres"
+						n_mat_path += tex_name.trim_suffix(
+							tex_name.get_extension()
+						) + "tres"
 						# If we don't have a material loaded, we can check if it exists
 						# and load it. Then we say the material was checked. We only
 						# need to check it once to know if it exists or not.
@@ -289,15 +318,22 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		st.generate_normals()
 		st.commit(arr_mesh)
 		st.clear()
-		arr_mesh.surface_set_name(arr_mesh.get_surface_count() - 1, tex_name.trim_suffix(tex_name.get_extension()).rstrip("."))
+		arr_mesh.surface_set_name(
+			arr_mesh.get_surface_count() - 1, 
+			tex_name.trim_suffix(
+				tex_name.get_extension()
+			).rstrip(".")
+		)
 		current_loaded_material = null
 		current_material_checked = false
 	
-	return ResourceSaver.save(arr_mesh, "%s.%s" % [save_path, _get_save_extension()])
+	return ResourceSaver.save(
+		arr_mesh, 
+		"%s.%s" % [save_path, _get_save_extension()]
+	)
 
 
 func read_b3d_string(file: FileAccess) -> String:
 	var len: int = file.get_32() as int
 	var string: String = file.get_buffer(len).get_string_from_utf8()
 	return string
-
