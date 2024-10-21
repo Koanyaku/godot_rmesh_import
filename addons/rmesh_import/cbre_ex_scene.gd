@@ -5,6 +5,12 @@ extends EditorImportPlugin
 enum PRESETS { DEFAULT }
 
 
+# Fix crash when importing multiple files.
+# Hopefully this will be resolved in Godot 4.4.
+func _can_import_threaded() -> bool:
+	return false
+
+
 func _get_importer_name() -> String:
 	return "rmesh.cbre-ex.scene"
 
