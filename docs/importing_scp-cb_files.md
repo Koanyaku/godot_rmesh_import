@@ -36,7 +36,9 @@ When you select "**SCP – CB RMesh as Mesh**" in the import tab, you will see t
         
     - Include Invisible Collisions
     
-        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. Some RMesh files have collisions that are invisible. If this value is _true_, they will be included in the imported mesh.
+        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. Some RMesh files have collisions that are invisible. If this value is _true_, they will be included in the imported mesh.<br><br>
+        
+        > ⚠️ **Due to how Meshes work, the invisible collisions surface will actually be visible, and you will need to make them invisible yourself with a custom Material.**
 
 ---
 
@@ -65,10 +67,6 @@ When you select "**SCP – CB RMesh as PackedScene**" in the import tab, you wil
     - Scale Mesh
     
         - A [Vector3](https://docs.godotengine.org/en/stable/classes/class_vector3.html) value representing the scale multiplier of the imported mesh. You usually don't want this to be the default value (1, 1, 1), but lower, as the mesh will be scaled up drastically, since sizes work different in SCP – CB and in Godot.
-        
-    - Include Invisible Collisions
-    
-        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. Some RMesh files have collisions that are invisible. If this value is _true_, they will be included in the imported mesh.
 
 ---
 
@@ -77,6 +75,12 @@ When you select "**SCP – CB RMesh as PackedScene**" in the import tab, you wil
     - Generate Collision Mesh
     
         - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, a single [trimesh collision shape](https://docs.godotengine.org/en/stable/classes/class_concavepolygonshape3d.html) will be automatically generated for the mesh.
+    
+    - Include Invisible Collisions
+    
+        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. Some RMesh files have collisions that are invisible. If this value is _true_, and "**Generate Collision Mesh**" is also _true_, they will be included in the imported mesh.<br><br>
+        
+        > ⚠️ **This setting ignores the 'Split Collision Mesh' setting and always generates a separate [StaticBody3D](https://docs.godotengine.org/en/stable/classes/class_staticbody3d.html) for the invisible collisions.**
     
     - Split Collision Mesh
     
@@ -168,7 +172,7 @@ When you select "**SCP – CB RMesh as PackedScene**" in the import tab, you wil
             
                 - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, player starts get imported as [Node3D](https://docs.godotengine.org/en/stable/classes/class_node3d.html)s (classname "playerstart" in the RMesh file).<br><br>
                 
-                > ⚠️ **Since there is no such thing as a "player start" in Godot, only empty Node3Ds get imported.**
+                > ⚠️ **Since there is no such thing as a "player start" in Godot, only empty Node3Ds get imported with the correct positions and rotations.**
         
         
         - **Models**
@@ -177,5 +181,5 @@ When you select "**SCP – CB RMesh as PackedScene**" in the import tab, you wil
             
                 - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, models get imported as [Node3D](https://docs.godotengine.org/en/stable/classes/class_node3d.html)s (classname "model" in the RMesh file).<br><br>
                 
-                > ⚠️ **Currently, only model's positions, rotations and scales get imported as empty Node3Ds with those values, not the models themselves based on their file path.**
+                > ⚠️ **Currently, only models' positions, rotations and scales get imported as empty Node3Ds with those values, not the models themselves based on their file path.**
         
