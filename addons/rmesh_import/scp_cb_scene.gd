@@ -227,12 +227,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			)
 			
 			# Get the texture and lightmap UVs.
-			var texU = vertex_data.decode_float(12)
-			var texV = vertex_data.decode_float(16)
-			var lmU = vertex_data.decode_float(20)
-			var lmV = vertex_data.decode_float(24)
-			tex_uvs.append(Vector2(texU, texV))
-			lm_uvs.append(Vector2(lmU, lmV))
+			var tex_u = vertex_data.decode_float(12)
+			var tex_v = vertex_data.decode_float(16)
+			var lm_u = vertex_data.decode_float(20)
+			var lm_v = vertex_data.decode_float(24)
+			tex_uvs.append(Vector2(tex_u, tex_v))
+			lm_uvs.append(Vector2(lm_u, lm_v))
 			
 			# The data for each vertex ends with three
 			# 'RGB' bytes. Usually, they are just three FF bytes.
