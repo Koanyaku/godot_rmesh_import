@@ -333,106 +333,107 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	if invis_coll_count > 0:
 		if generate_coll and include_invis_coll:
-			# Get the invisible collision vertex count.
-			var invis_coll_vert_count: int = file.get_32()
-			
-			# Get the invisible collision vertices.
-			var invis_coll_vertices: PackedVector3Array = PackedVector3Array()
-			for i in invis_coll_vert_count:
-				# The actual data for each invisible collision vertex
-				# takes up 12 bytes. Only the X, Y and Z positions get
-				# saved with invisible collision vertices. Other than
-				# that, we do mostly the same things as with normal
-				# face vertices.
-				var invis_coll_vertex_data: PackedByteArray = (
-					file.get_buffer(12)
-				)
+			for i in invis_coll_count:
+				# Get the invisible collision vertex count.
+				var invis_coll_vert_count: int = file.get_32()
 				
-				var pos_x: float = invis_coll_vertex_data.decode_float(0)
-				var pos_y: float = invis_coll_vertex_data.decode_float(4)
-				var pos_z: float = invis_coll_vertex_data.decode_float(8)
-				invis_coll_vertices.append(
-					Vector3(pos_x, pos_y, -pos_z)
-					* scale_mesh
-				)
-				
-				# The data for each invisible collision vertex
-				# doesn't end with any extra bytes.
-			
-			# Get the invisible collision triangle count.
-			var invis_coll_tri_count: int = file.get_32()
-			
-			# Get the invisible collision triangle indices.
-			var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array()
-			for i in invis_coll_tri_count * 3:
-				# Each indice is stored as 4 bytes.
-				invis_coll_tri_indices.append(file.get_32())
-			
-			# The triangle indice count must be a multiple
-			# of the triangle count.
-			if invis_coll_tri_indices.size() % invis_coll_tri_count:
-				push_error(
-					"SCP-CB Scene import -"
-					+ " Invisible collision triangle indice count"
-					+ " is not a multiple of the invisible"
-					+ " collision triangle count"
-					+ " (indice count is " 
-					+ str(invis_coll_tri_indices.size())
-					+ ", triangle count is " 
-					+ str(invis_coll_tri_count) + ", " 
-					+ str(invis_coll_tri_indices.size()) + " mod "
-					+ str(invis_coll_tri_count) + " = "
-					+ str(
-						invis_coll_tri_indices.size()
-						% invis_coll_tri_count
+				# Get the invisible collision vertices.
+				var invis_coll_vertices: PackedVector3Array = PackedVector3Array()
+				for j in invis_coll_vert_count:
+					# The actual data for each invisible collision vertex
+					# takes up 12 bytes. Only the X, Y and Z positions get
+					# saved with invisible collision vertices. Other than
+					# that, we do mostly the same things as with normal
+					# face vertices.
+					var invis_coll_vertex_data: PackedByteArray = (
+						file.get_buffer(12)
 					)
-					+ ")."
-				)
-				return FAILED
-			
-			# For each invisible collision indice, give it it's
-			# corresponding vertex.
-			var invis_coll_vert_ind_pairs: Dictionary = {}
-			var pos_in_invis_coll_ind_arr: int = -1
-			for i in invis_coll_tri_indices.size():
-				pos_in_invis_coll_ind_arr += 1
-				# If an indice already has vertex data associated
-				# with it, we know we can just skip it.
-				if not invis_coll_vert_ind_pairs.has(
-					invis_coll_tri_indices[i]
+					
+					var pos_x: float = invis_coll_vertex_data.decode_float(0)
+					var pos_y: float = invis_coll_vertex_data.decode_float(4)
+					var pos_z: float = invis_coll_vertex_data.decode_float(8)
+					invis_coll_vertices.append(
+						Vector3(pos_x, pos_y, -pos_z)
+						* scale_mesh
+					)
+					
+					# The data for each invisible collision vertex
+					# doesn't end with any extra bytes.
+				
+				# Get the invisible collision triangle count.
+				var invis_coll_tri_count: int = file.get_32()
+				
+				# Get the invisible collision triangle indices.
+				var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array()
+				for j in invis_coll_tri_count * 3:
+					# Each indice is stored as 4 bytes.
+					invis_coll_tri_indices.append(file.get_32())
+				
+				# The triangle indice count must be a multiple
+				# of the triangle count.
+				if invis_coll_tri_indices.size() % invis_coll_tri_count:
+					push_error(
+						"SCP-CB Scene import -"
+						+ " Invisible collision triangle indice count"
+						+ " is not a multiple of the invisible"
+						+ " collision triangle count"
+						+ " (indice count is " 
+						+ str(invis_coll_tri_indices.size())
+						+ ", triangle count is " 
+						+ str(invis_coll_tri_count) + ", " 
+						+ str(invis_coll_tri_indices.size()) + " mod "
+						+ str(invis_coll_tri_count) + " = "
+						+ str(
+							invis_coll_tri_indices.size()
+							% invis_coll_tri_count
+						)
+						+ ")."
+					)
+					return FAILED
+				
+				# For each invisible collision indice, give it it's
+				# corresponding vertex.
+				var invis_coll_vert_ind_pairs: Dictionary = {}
+				var pos_in_invis_coll_ind_arr: int = -1
+				for j in invis_coll_tri_indices.size():
+					pos_in_invis_coll_ind_arr += 1
+					# If an indice already has vertex data associated
+					# with it, we know we can just skip it.
+					if not invis_coll_vert_ind_pairs.has(
+						invis_coll_tri_indices[j]
+					):
+						invis_coll_vert_ind_pairs[
+							invis_coll_tri_indices[j]
+						] = invis_coll_vertices[pos_in_invis_coll_ind_arr]
+					else:
+						pos_in_invis_coll_ind_arr -= 1
+				
+				# Every invisible collision vertex should have only
+				# one indice associated with it.
+				if not (
+					invis_coll_vert_ind_pairs.size() 
+					== invis_coll_vertices.size()
 				):
-					invis_coll_vert_ind_pairs[
-						invis_coll_tri_indices[i]
-					] = invis_coll_vertices[pos_in_invis_coll_ind_arr]
-				else:
-					pos_in_invis_coll_ind_arr -= 1
-			
-			# Every invisible collision vertex should have only
-			# one indice associated with it.
-			if not (
-				invis_coll_vert_ind_pairs.size() 
-				== invis_coll_vertices.size()
-			):
-				push_error(
-					"SCP-CB Scene import - Invisible collision"
-					+ " vertice-indice pairs array size"
-					+ " doesn't match invisible collision"
-					+ " vertices array size. Every indice"
-					+ " should have one set of vertices assigned to it."
-					+ " (vertice-indice pairs array size: " 
-					+ str(invis_coll_vert_ind_pairs.size()) 
-					+ ", vertices array size: "
-					+ str(invis_coll_vertices.size())
-					+ ")"
+					push_error(
+						"SCP-CB Scene import - Invisible collision"
+						+ " vertice-indice pairs array size"
+						+ " doesn't match invisible collision"
+						+ " vertices array size. Every indice"
+						+ " should have one set of vertices assigned to it."
+						+ " (vertice-indice pairs array size: " 
+						+ str(invis_coll_vert_ind_pairs.size()) 
+						+ ", vertices array size: "
+						+ str(invis_coll_vertices.size())
+						+ ")"
+					)
+					return FAILED
+				
+				invis_coll_arr.append(
+					{
+						"indices": invis_coll_tri_indices,
+						"pairs": invis_coll_vert_ind_pairs
+					}
 				)
-				return FAILED
-			
-			invis_coll_arr.append(
-				{
-					"indices": invis_coll_tri_indices,
-					"pairs": invis_coll_vert_ind_pairs
-				}
-			)
 		else:
 			# If the RMesh has invisible collisions but we choose to
 			# ignore them, we still have to move forward in the file
