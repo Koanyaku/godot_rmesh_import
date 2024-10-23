@@ -5,7 +5,7 @@ extends EditorImportPlugin
 enum PRESETS { DEFAULT }
 
 
-# Fix crash when importing multiple files.
+# Fix crash when importing multiple files with threads.
 # Hopefully this will be resolved in Godot 4.4.
 func _can_import_threaded() -> bool:
 	return false
@@ -93,7 +93,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		not header == "RoomMesh" 
 		and not header == "RoomMesh.HasTriggerBox"
 	):
-		return ERR_FILE_UNRECOGNIZED
+		push_error(
+			"SCP-CB Mesh import - Importing SCP-CB RMesh,"
+			+ " but header is \"" + header 
+			+ "\", not \"RoomMesh\" or \"RoomMesh.HasTriggerBox\"."
+		)
+		return FAILED
 	
 	var scale_mesh: Vector3 = options.get(
 		"mesh/scale_mesh"
@@ -127,20 +132,29 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# 1 = Texture is opaque
 		# 2 = Texture is a lightmap
 		# 3 = Texture has transparency
-		var tex_flag: int = 0
+		var lm_flag: int = 0
 		
 		# If a lightmap exists for this texture, it's always
 		# written before the texture.
-		tex_flag = file.get_8()
+		lm_flag = file.get_8()
 		var lm_name: String = ""
-		if tex_flag == 2:
+		if lm_flag == 2:
 			lm_name = read_b3d_string(file)
 		else:
 			# If a lightmap doesn't exist for this texture,
 			# there's a 4-byte padding after the flag.
 			file.get_32()
 		
-		tex_flag = file.get_8()
+		var tex_flag = file.get_8()
+		# If the texture flag is 3, then in SCP-CB RMesh
+		# files, the lightmap flag must always be 1.
+		if tex_flag == 3 and not lm_flag == 1:
+			push_error(
+				"SCP-CB Scene import - Texture flag is 3"
+				+ ", but lightmap flag is not 1."
+			)
+			return FAILED
+		
 		var tex_name: String = read_b3d_string(file)
 		if !tex_dict.has(tex_name):
 			tex_dict[tex_name] = [] as Array[Dictionary]
@@ -199,6 +213,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# The triangle indice count must be a multiple
 		# of the triangle count.
 		if tri_indices.size() % tri_count:
+			push_error(
+				"SCP-CB Mesh import - Triangle indice count"
+				+ " is not a multiple of the triangle count"
+				+ " (indice count: " + str(tri_indices.size())
+				+ ", triangle count: " + str(tri_count)
+				+ ", " + str(tri_indices.size()) + " mod "
+				+ str(tri_count) + " = "
+				+ str(tri_indices.size() % tri_count) + ")."
+			)
 			return FAILED
 		
 		# For each indice, give it it's corresponding vertex,
@@ -221,6 +244,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# Every vertex should have only one indice
 		# associated with it.
 		if not vert_ind_pairs.size() == vertices.size():
+			push_error(
+				"SCP-CB Mesh import - Vertice-indice pairs array size"
+				+ " doesn't match vertices array size. Every indice"
+				+ " should have one set of vertices assigned to it"
+				+ " (vertice-indice pairs array size: " 
+				+ str(vert_ind_pairs.size()) 
+				+ ", vertices array size: " + str(vertices.size())
+				+ ")."
+			)
 			return FAILED
 		
 		Array(tex_dict.get(tex_name)).append(
@@ -282,6 +314,23 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		# The triangle indice count must be a multiple of the triangle count.
 		if invis_coll_tri_indices.size() % invis_coll_tri_count:
+			push_error(
+				"SCP-CB Mesh import -"
+				+ " Invisible collision triangle indice count"
+				+ " is not a multiple of the invisible"
+				+ " collision triangle count"
+				+ " (indice count is " 
+				+ str(invis_coll_tri_indices.size())
+				+ ", triangle count is " 
+				+ str(invis_coll_tri_count) + ", " 
+				+ str(invis_coll_tri_indices.size()) + " mod "
+				+ str(invis_coll_tri_count) + " = "
+				+ str(
+					invis_coll_tri_indices.size()
+					% invis_coll_tri_count
+				)
+				+ ")."
+			)
 			return FAILED
 		
 		# For each invisible collision indice, give it it's
@@ -309,6 +358,18 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			invis_coll_vert_ind_pairs.size()
 			== invis_coll_vertices.size()
 		):
+			push_error(
+				"SCP-CB Mesh import - Invisible collision"
+				+ " vertice-indice pairs array size"
+				+ " doesn't match invisible collision"
+				+ " vertices array size. Every indice"
+				+ " should have one set of vertices assigned to it."
+				+ " (vertice-indice pairs array size: " 
+				+ str(invis_coll_vert_ind_pairs.size()) 
+				+ ", vertices array size: "
+				+ str(invis_coll_vertices.size())
+				+ ")"
+			)
 			return FAILED
 		
 		Array(tex_dict.get("invisible_collision")).append(

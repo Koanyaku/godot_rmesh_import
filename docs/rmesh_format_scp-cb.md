@@ -101,7 +101,7 @@ Text: .....concretefloor.jpgð.
 Next, the amount of vertices that are associated with the texture is stored.
 
 ```
-Hex: 6F 72 2E 6A 70 67 F0 00 00 00 00 00 80 44
+Hex: 6F 72 2E 6A 70 67 >[F0 00 00 00]< 00 00 80 44
 Text: or.jpgð.....€D
 
 4-byte 'int' value representing the vertex count. In this case, 240.

@@ -5,7 +5,7 @@ extends EditorImportPlugin
 enum PRESETS { DEFAULT }
 
 
-# Fix crash when importing multiple files.
+# Fix crash when importing multiple files with threads.
 # Hopefully this will be resolved in Godot 4.4.
 func _can_import_threaded() -> bool:
 	return false
@@ -150,8 +150,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		not header == "RoomMesh" 
 		and not header == "RoomMesh.HasTriggerBox"
 	):
-		return ERR_FILE_UNRECOGNIZED
-	
+		push_error(
+			"SCP-CB Scene import - Importing SCP-CB RMesh,"
+			+ " but header is \"" + header 
+			+ "\", not \"RoomMesh\" or \"RoomMesh.HasTriggerBox\"."
+		)
+		return FAILED
 	var scale_mesh: Vector3 = options.get(
 		"mesh/scale_mesh"
 	) as Vector3
@@ -184,20 +188,29 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# 1 = Texture is opaque
 		# 2 = Texture is a lightmap
 		# 3 = Texture has transparency
-		var tex_flag: int = 0
+		var lm_flag: int = 0
 		
 		# If a lightmap exists for this texture, it's always
 		# written before the texture.
-		tex_flag = file.get_8()
+		lm_flag = file.get_8()
 		var lm_name: String = ""
-		if tex_flag == 2:
+		if lm_flag == 2:
 			lm_name = read_b3d_string(file)
 		else:
 			# If a lightmap doesn't exist for this texture,
 			# there's a 4-byte padding after the flag.
 			file.get_32()
 		
-		tex_flag = file.get_8()
+		var tex_flag = file.get_8()
+		# If the texture flag is 3, then in SCP-CB RMesh
+		# files, the lightmap flag must always be 1.
+		if tex_flag == 3 and not lm_flag == 1:
+			push_error(
+				"SCP-CB Scene import - Texture flag is 3"
+				+ ", but lightmap flag is not 1."
+			)
+			return FAILED
+		
 		var tex_name: String = read_b3d_string(file)
 		if not tex_dict.has(tex_name):
 			tex_dict[tex_name] = [] as Array[Dictionary]
@@ -256,6 +269,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# The triangle indice count must be a multiple
 		# of the triangle count.
 		if tri_indices.size() % tri_count:
+			push_error(
+				"SCP-CB Scene import - Triangle indice count"
+				+ " is not a multiple of the triangle count"
+				+ " (indice count: " + str(tri_indices.size())
+				+ ", triangle count: " + str(tri_count)
+				+ ", " + str(tri_indices.size()) + " mod "
+				+ str(tri_count) + " = "
+				+ str(tri_indices.size() % tri_count) + ")."
+			)
 			return FAILED
 		
 		# For each indice, give it it's corresponding vertex,
@@ -278,6 +300,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# Every vertex should have only one indice
 		# associated with it.
 		if not vert_ind_pairs.size() == vertices.size():
+			push_error(
+				"SCP-CB Scene import - Vertice-indice pairs array size"
+				+ " doesn't match vertices array size. Every indice"
+				+ " should have one set of vertices assigned to it"
+				+ " (vertice-indice pairs array size: " 
+				+ str(vert_ind_pairs.size()) 
+				+ ", vertices array size: " + str(vertices.size())
+				+ ")."
+			)
 			return FAILED
 		
 		Array(tex_dict.get(tex_name)).append(
@@ -300,82 +331,119 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# the same processes as with the normal face data.
 	var invis_coll_arr: Array[Dictionary] = []
 	
-	if (
-		generate_coll
-		and include_invis_coll
-		and invis_coll_count > 0
-	):
-		# Get the invisible collision vertex count.
-		var invis_coll_vert_count: int = file.get_32()
-		
-		# Get the invisible collision vertices.
-		var invis_coll_vertices: PackedVector3Array = PackedVector3Array()
-		for i in invis_coll_vert_count:
-			# The actual data for each invisible collision vertex
-			# takes up 12 bytes. Only the X, Y and Z positions get
-			# saved with invisible collision vertices. Other than
-			# that, we do mostly the same things as with normal
-			# face vertices.
-			var invis_coll_vertex_data: PackedByteArray = (
-				file.get_buffer(12)
-			)
+	if invis_coll_count > 0:
+		if generate_coll and include_invis_coll:
+			# Get the invisible collision vertex count.
+			var invis_coll_vert_count: int = file.get_32()
 			
-			var pos_x: float = invis_coll_vertex_data.decode_float(0)
-			var pos_y: float = invis_coll_vertex_data.decode_float(4)
-			var pos_z: float = invis_coll_vertex_data.decode_float(8)
-			invis_coll_vertices.append(
-				Vector3(pos_x, pos_y, -pos_z)
-				* scale_mesh
-			)
+			# Get the invisible collision vertices.
+			var invis_coll_vertices: PackedVector3Array = PackedVector3Array()
+			for i in invis_coll_vert_count:
+				# The actual data for each invisible collision vertex
+				# takes up 12 bytes. Only the X, Y and Z positions get
+				# saved with invisible collision vertices. Other than
+				# that, we do mostly the same things as with normal
+				# face vertices.
+				var invis_coll_vertex_data: PackedByteArray = (
+					file.get_buffer(12)
+				)
+				
+				var pos_x: float = invis_coll_vertex_data.decode_float(0)
+				var pos_y: float = invis_coll_vertex_data.decode_float(4)
+				var pos_z: float = invis_coll_vertex_data.decode_float(8)
+				invis_coll_vertices.append(
+					Vector3(pos_x, pos_y, -pos_z)
+					* scale_mesh
+				)
+				
+				# The data for each invisible collision vertex
+				# doesn't end with any extra bytes.
 			
-			# The data for each invisible collision vertex
-			# doesn't end with any extra bytes.
-		
-		# Get the invisible collision triangle count.
-		var invis_coll_tri_count: int = file.get_32()
-		
-		# Get the invisible collision triangle indices.
-		var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array()
-		for i in invis_coll_tri_count * 3:
-			# Each indice is stored as 4 bytes.
-			invis_coll_tri_indices.append(file.get_32())
-		
-		# The triangle indice count must be a multiple
-		# of the triangle count.
-		if invis_coll_tri_indices.size() % invis_coll_tri_count:
-			return FAILED
-		
-		# For each invisible collision indice, give it it's
-		# corresponding vertex.
-		var invis_coll_vert_ind_pairs: Dictionary = {}
-		var pos_in_invis_coll_ind_arr: int = -1
-		for i in invis_coll_tri_indices.size():
-			pos_in_invis_coll_ind_arr += 1
-			# If an indice already has vertex data associated
-			# with it, we know we can just skip it.
-			if not invis_coll_vert_ind_pairs.has(
-				invis_coll_tri_indices[i]
-			):
-				invis_coll_vert_ind_pairs[
+			# Get the invisible collision triangle count.
+			var invis_coll_tri_count: int = file.get_32()
+			
+			# Get the invisible collision triangle indices.
+			var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array()
+			for i in invis_coll_tri_count * 3:
+				# Each indice is stored as 4 bytes.
+				invis_coll_tri_indices.append(file.get_32())
+			
+			# The triangle indice count must be a multiple
+			# of the triangle count.
+			if invis_coll_tri_indices.size() % invis_coll_tri_count:
+				push_error(
+					"SCP-CB Scene import -"
+					+ " Invisible collision triangle indice count"
+					+ " is not a multiple of the invisible"
+					+ " collision triangle count"
+					+ " (indice count is " 
+					+ str(invis_coll_tri_indices.size())
+					+ ", triangle count is " 
+					+ str(invis_coll_tri_count) + ", " 
+					+ str(invis_coll_tri_indices.size()) + " mod "
+					+ str(invis_coll_tri_count) + " = "
+					+ str(
+						invis_coll_tri_indices.size()
+						% invis_coll_tri_count
+					)
+					+ ")."
+				)
+				return FAILED
+			
+			# For each invisible collision indice, give it it's
+			# corresponding vertex.
+			var invis_coll_vert_ind_pairs: Dictionary = {}
+			var pos_in_invis_coll_ind_arr: int = -1
+			for i in invis_coll_tri_indices.size():
+				pos_in_invis_coll_ind_arr += 1
+				# If an indice already has vertex data associated
+				# with it, we know we can just skip it.
+				if not invis_coll_vert_ind_pairs.has(
 					invis_coll_tri_indices[i]
-				] = invis_coll_vertices[pos_in_invis_coll_ind_arr]
-			else:
-				pos_in_invis_coll_ind_arr -= 1
-		
-		# Every invisible collision vertex should have only
-		# one indice associated with it.
-		if not (
-			invis_coll_vert_ind_pairs.size() 
-			== invis_coll_vertices.size()
-		):
-			return FAILED
-		
-		invis_coll_arr.append(
-			{
-				"indices": invis_coll_tri_indices,
-				"pairs": invis_coll_vert_ind_pairs
-			}
-		)
+				):
+					invis_coll_vert_ind_pairs[
+						invis_coll_tri_indices[i]
+					] = invis_coll_vertices[pos_in_invis_coll_ind_arr]
+				else:
+					pos_in_invis_coll_ind_arr -= 1
+			
+			# Every invisible collision vertex should have only
+			# one indice associated with it.
+			if not (
+				invis_coll_vert_ind_pairs.size() 
+				== invis_coll_vertices.size()
+			):
+				push_error(
+					"SCP-CB Scene import - Invisible collision"
+					+ " vertice-indice pairs array size"
+					+ " doesn't match invisible collision"
+					+ " vertices array size. Every indice"
+					+ " should have one set of vertices assigned to it."
+					+ " (vertice-indice pairs array size: " 
+					+ str(invis_coll_vert_ind_pairs.size()) 
+					+ ", vertices array size: "
+					+ str(invis_coll_vertices.size())
+					+ ")"
+				)
+				return FAILED
+			
+			invis_coll_arr.append(
+				{
+					"indices": invis_coll_tri_indices,
+					"pairs": invis_coll_vert_ind_pairs
+				}
+			)
+		else:
+			# If the RMesh has invisible collisions but we choose to
+			# ignore them, we still have to move forward in the file
+			# so that we don't read the wrong data afterwards.
+			for i in invis_coll_count:
+				var invis_coll_vert_count: int = file.get_32()
+				for j in invis_coll_vert_count * 3:
+					file.get_32()
+				var invis_coll_tri_count: int = file.get_32()
+				for j in invis_coll_tri_count * 3:
+					file.get_32()
 	
 	# Initialize the ArrayMesh and SurfaceTool.
 	var arr_mesh: ArrayMesh = ArrayMesh.new()
@@ -548,17 +616,6 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			coll_body.add_child(coll_shape)
 			coll_shape.owner = saved_scene_root
 	
-	# If the RMesh has invisible collisions but we choose to
-	# ignore them, we still have to move forward in the file
-	# so that we don't read the wrong data afterwards.
-	if invis_coll_arr.is_empty():
-		var invis_coll_vert_count: int = file.get_32()
-		for i in invis_coll_vert_count * 3:
-			file.get_32()
-		var invis_coll_tri_count: int = file.get_32()
-		for i in invis_coll_tri_count * 3:
-			file.get_32()
-	
 	var include_trb: bool = options.get(
 		"trigger_boxes/include_trigger_boxes"
 	) as bool
@@ -620,6 +677,24 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						curr_trb_tri_indices.size()
 						% curr_trb_tri_count
 					):
+						push_error(
+							"SCP-CB Scene import -"
+							+ " Trigger box triangle indice count"
+							+ " is not a multiple of the trigger"
+							+ " box triangle count"
+							+ " (indice count is " 
+							+ str(curr_trb_tri_indices.size())
+							+ ", triangle count is " 
+							+ str(curr_trb_tri_count) + ", " 
+							+ str(curr_trb_tri_indices.size())
+							+ " mod "
+							+ str(curr_trb_tri_count) + " = "
+							+ str(
+								curr_trb_tri_indices.size()
+								% curr_trb_tri_count
+							)
+							+ ")."
+						)
 						return FAILED
 					
 					# For each indice, give it it's
@@ -650,6 +725,18 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						curr_trb_vert_ind_pairs.size()
 						== curr_trb_vertices.size()
 					):
+						push_error(
+							"SCP-CB Scene import - Trigger box"
+							+ " vertice-indice pairs array size"
+							+ " doesn't match trigger box"
+							+ " vertices array size. Every indice"
+							+ " should have one set of vertices assigned to it."
+							+ " (vertice-indice pairs array size: " 
+							+ str(curr_trb_vert_ind_pairs.size()) 
+							+ ", vertices array size: "
+							+ str(curr_trb_vertices.size())
+							+ ")"
+						)
 						return FAILED
 					
 					var curr_trb_name: String = read_b3d_string(file)
@@ -1062,9 +1149,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						model_node.owner = saved_scene_root
 				_:
-					printerr(
-						"Unknown entity detected,"
-						+ " probably custom entity."
+					push_error(
+						"SCP-CB Scene import - Unknown entity"
+						+ " detected, probably custom entity ("
+						+ ent_name + ")."
 					)
 					break
 	
