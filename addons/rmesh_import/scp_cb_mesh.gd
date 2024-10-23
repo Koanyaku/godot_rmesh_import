@@ -1,4 +1,4 @@
-# https://github.com/AnalogFeelings/cbre-ex/blob/main/Source/CBRE.Editor/Compiling/RMeshExport.cs
+# https://github.com/Regalis11/scpcb/blob/master/Converter.bb
 @tool
 extends EditorImportPlugin
 
@@ -12,11 +12,11 @@ func _can_import_threaded() -> bool:
 
 
 func _get_importer_name() -> String:
-	return "rmesh.cbre-ex.mesh"
+	return "rmesh.scpcb.mesh"
 
 
 func _get_visible_name() -> String:
-	return "CBRE-EX RMesh as Mesh"
+	return "SCP – CB RMesh as Mesh"
 
 
 func _get_recognized_extensions() -> PackedStringArray:
@@ -45,7 +45,6 @@ func _get_preset_name(preset_index) -> String:
 			return "Default"
 		_:
 			return "Unknown"
-
 
 func _get_import_order() -> ImportOrder:
 	return IMPORT_ORDER_DEFAULT
@@ -85,12 +84,19 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	if not file:
 		return FileAccess.get_open_error()
 	
-	# Get the header.
+	# ATTENTION: We are now heading into the DANGER zone.
+	
+	# Get the header. It should either be "RoomMesh" 
+	# or "RoomMesh.HasTriggerBox".
 	var header: String = read_b3d_string(file)
-	if not header == "RoomMesh":
+	if (
+		not header == "RoomMesh" 
+		and not header == "RoomMesh.HasTriggerBox"
+	):
 		push_error(
-			"CBRE-EX Mesh import - Header must be \"RoomMesh\","
-			+ " instead is \"" + header + "\"."
+			"SCP-CB Mesh import - Importing SCP-CB RMesh,"
+			+ " but header is \"" + header 
+			+ "\", not \"RoomMesh\" or \"RoomMesh.HasTriggerBox\"."
 		)
 		return FAILED
 	
@@ -102,7 +108,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	var saved_scene_root_name: String = (
 		source_file.get_file()
 		.trim_suffix(".rmesh")
-	) as String
+	)
 	saved_scene_root.name = saved_scene_root_name
 	
 	# Get the texture count.
@@ -119,20 +125,33 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# In the RMesh file, faces are just stored as a sequence of 
 	# vertices for each texture.
 	for i in tex_count:
-		var lm_flag: int = file.get_8()
-		var lm_name: String = ""
-		# If the lightmap flag is 0, a lightmap isn't 
-		# generated for this texture.
-		if lm_flag == 1:
-			lm_name = read_b3d_string(file)
+		# Each texture, regular or lightmap, has a flag written
+		# with it as a 1-byte number.
+		# Here's what they mean:
+		# 0 = Texture is not written in the file
+		# 1 = Texture is opaque
+		# 2 = Texture is a lightmap
+		# 3 = Texture has transparency
+		var lm_flag: int = 0
 		
-		# If the texture flag is 3, the texture is 
-		# without a lightmap.
+		# If a lightmap exists for this texture, it's always
+		# written before the texture.
+		lm_flag = file.get_8()
+		var lm_name: String = ""
+		if lm_flag == 2:
+			lm_name = read_b3d_string(file)
+		else:
+			# If a lightmap doesn't exist for this texture,
+			# there's a 4-byte padding after the flag.
+			file.get_32()
+		
 		var tex_flag = file.get_8()
-		if tex_flag == 3 and not lm_flag == 0:
+		# If the texture flag is 3, then in SCP-CB RMesh
+		# files, the lightmap flag must always be 1.
+		if tex_flag == 3 and not lm_flag == 1:
 			push_error(
-				"CBRE-EX Mesh import - Texture flag is 3"
-				+ ", but lightmap flag is not 0."
+				"SCP-CB Scene import - Texture flag is 3"
+				+ ", but lightmap flag is not 1."
 			)
 			return FAILED
 		
@@ -155,22 +174,16 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var vertex_data: PackedByteArray = file.get_buffer(31)
 			
 			# Each vertex X, Y and Z position takes up 4 bytes.
-			# In CBRE-EX, X and Y are horizontal positions, 
-			# while Z is vertical. This means that a vertex 
-			# location is technically X Z Y. This is how they
-			# are stored in the file, however, in Godot, X and Z
-			# are horizontal, while Y is vertical.
-			
-			# CBRE-EX 'X' position
+			# SCP-CB's rooms are made in 3D World Studio, and 
+			# since that program is as old as time itself and 
+			# won't run on anything higher than Windows 7, 
+			# I don't really know how these positions work in it.
 			var pos_x: float = vertex_data.decode_float(0)
-			# CBRE-EX 'Z' position
 			var pos_y: float = vertex_data.decode_float(4)
-			# CBRE-EX 'Y' position
 			var pos_z: float = vertex_data.decode_float(8)
 			
-			# In CBRE-EX, the positive 'Y' axis 
-			# (Godot's positive Z axis) is in the opposite direction
-			# to Godot's positive Z axis, so we have to flip it here.
+			# I guess the positive Z direction is still
+			# flipped though.
 			vertices.append(
 				Vector3(pos_x, pos_y, -pos_z)
 				* scale_mesh
@@ -201,10 +214,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# of the triangle count.
 		if tri_indices.size() % tri_count:
 			push_error(
-				"CBRE-EX Mesh import - Triangle indice count"
+				"SCP-CB Mesh import - Triangle indice count"
 				+ " is not a multiple of the triangle count"
-				+ " (indice count is " + str(tri_indices.size())
-				+ ", triangle count is " + str(tri_count)
+				+ " (indice count: " + str(tri_indices.size())
+				+ ", triangle count: " + str(tri_count)
 				+ ", " + str(tri_indices.size()) + " mod "
 				+ str(tri_count) + " = "
 				+ str(tri_indices.size() % tri_count) + ")."
@@ -217,7 +230,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		var pos_in_ind_arr: int = -1
 		for j in tri_indices.size() as int:
 			pos_in_ind_arr += 1
-			# If an indice already has vertex data associated
+			# If an indice already has vertex data associated 
 			# with it, we know we can just skip it.
 			if not vert_ind_pairs.has(tri_indices[j]):
 				vert_ind_pairs[tri_indices[j]] = [
@@ -232,13 +245,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# associated with it.
 		if not vert_ind_pairs.size() == vertices.size():
 			push_error(
-				"CBRE-EX Mesh import - Vertice-indice pairs array size"
+				"SCP-CB Mesh import - Vertice-indice pairs array size"
 				+ " doesn't match vertices array size. Every indice"
-				+ " should have one set of vertices assigned to it."
+				+ " should have one set of vertices assigned to it"
 				+ " (vertice-indice pairs array size: " 
 				+ str(vert_ind_pairs.size()) 
 				+ ", vertices array size: " + str(vertices.size())
-				+ ")"
+				+ ")."
 			)
 			return FAILED
 		
@@ -249,14 +262,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			}
 		)
 	
-	var has_invis_coll: bool = file.get_32() as bool
+	# Get the invisible collision face count.
+	var invis_coll_count: int = file.get_32()
 	var include_invis_coll: bool = options.get(
 		"mesh/include_invisible_collisions"
 	) as bool
 	
 	# Handle invisible collisions. We mostly have to repeat
 	# the same processes as with the normal face data.
-	if include_invis_coll and has_invis_coll:
+	if include_invis_coll and invis_coll_count > 0:
 		tex_dict["invisible_collision"] = []
 		
 		# Get the invisible collision vertex count.
@@ -276,11 +290,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				file.get_buffer(12)
 			)
 			
-			# CBRE-EX 'X' position
 			var pos_x: float = invis_coll_vertex_data.decode_float(0)
-			# CBRE-EX 'Z' position
 			var pos_y: float = invis_coll_vertex_data.decode_float(4)
-			# CBRE-EX 'Y' position
 			var pos_z: float = invis_coll_vertex_data.decode_float(8)
 			invis_coll_vertices.append(
 				Vector3(pos_x, pos_y, -pos_z)
@@ -301,11 +312,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			# Each indice is stored as 4 bytes.
 			invis_coll_tri_indices.append(file.get_32())
 		
-		# The triangle indice count must be a multiple
-		# of the triangle count.
+		# The triangle indice count must be a multiple of the triangle count.
 		if invis_coll_tri_indices.size() % invis_coll_tri_count:
 			push_error(
-				"CBRE-EX Mesh import -"
+				"SCP-CB Mesh import -"
 				+ " Invisible collision triangle indice count"
 				+ " is not a multiple of the invisible"
 				+ " collision triangle count"
@@ -329,9 +339,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		var pos_in_invis_coll_ind_arr: int = -1
 		for i in invis_coll_tri_indices.size():
 			pos_in_invis_coll_ind_arr += 1
-			# If an indice already has vertex data associated
-			# with it, we know we can just skip it.
-			if not invis_coll_vert_ind_pairs.has(
+			# If an indice already has vertex data associated with it, 
+			# we know we can just skip it.
+			if !invis_coll_vert_ind_pairs.has(
 				invis_coll_tri_indices[i]
 			):
 				invis_coll_vert_ind_pairs[
@@ -349,7 +359,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			== invis_coll_vertices.size()
 		):
 			push_error(
-				"CBRE-EX Mesh import - Invisible collision"
+				"SCP-CB Mesh import - Invisible collision"
 				+ " vertice-indice pairs array size"
 				+ " doesn't match invisible collision"
 				+ " vertices array size. Every indice"
@@ -408,7 +418,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					# Set the material.
 					if (
-						not mat_path == ""
+						not mat_path == "" 
 						and not current_material_checked 
 						and not current_loaded_material
 					):
