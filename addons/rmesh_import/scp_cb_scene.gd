@@ -61,6 +61,10 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 					"property_hint": PROPERTY_HINT_LINK,
 				},
 				{
+					"name": "mesh/include_lightmaps",
+					"default_value": false,
+				},
+				{
 					"name": "collision/generate_collision_mesh",
 					"default_value": false,
 				},
@@ -170,12 +174,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# Get the texture count.
 	var tex_count: int = file.get_32()
 	
-	# We accumulate all the data for all the textures in this 
-	# texture dictionary. Each texture will store an array of 
-	# dictionaries, where each dictionary will store a specific
-	# set of indices, where each indice stores an array of values
-	# for that indice.
-	var tex_dict: Dictionary = {}
+	var surf_dict: Dictionary = {}
+	
+	var used_tex: PackedStringArray = PackedStringArray()
+	
+	var include_lm: bool = options.get(
+		"mesh/include_lightmaps"
+	) as bool
 	
 	# Each texture has a set amount of faces associated with it.
 	# In the RMesh file, faces are just stored as a sequence of 
@@ -199,6 +204,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		else:
 			# If a lightmap doesn't exist for this texture,
 			# there's a 4-byte padding after the flag.
+			lm_name = "none"
 			file.get_32()
 		
 		var tex_flag = file.get_8()
@@ -212,14 +218,17 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			return FAILED
 		
 		var tex_name: String = read_b3d_string(file)
-		if not tex_dict.has(tex_name):
-			tex_dict[tex_name] = [] as Array[Dictionary]
+		if not surf_dict.has(lm_name):
+			surf_dict[lm_name] = {}
+		if not surf_dict.get(lm_name).has(tex_name):
+			surf_dict.get(lm_name)[tex_name] = {}
+		if not used_tex.has(tex_name):
+			used_tex.append(tex_name)
 		
 		# Get the vertex count.
 		var vertex_count: int = file.get_32()
 		
 		# Initialize arrays for texture and lightmap UVs.
-		# NOTE: Lightmap UVs are not used.
 		var tex_uvs: PackedVector2Array = PackedVector2Array()
 		var lm_uvs: PackedVector2Array = PackedVector2Array()
 		
@@ -289,11 +298,17 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			# If an indice already has vertex data associated 
 			# with it, we know we can just skip it.
 			if not vert_ind_pairs.has(tri_indices[j]):
-				vert_ind_pairs[tri_indices[j]] = [
-					vertices[pos_in_ind_arr],
-					tex_uvs[pos_in_ind_arr],
-					lm_uvs[pos_in_ind_arr]
-				]
+				if include_lm:
+					vert_ind_pairs[tri_indices[j]] = [
+						vertices[pos_in_ind_arr],
+						tex_uvs[pos_in_ind_arr],
+						lm_uvs[pos_in_ind_arr],
+					]
+				else:
+					vert_ind_pairs[tri_indices[j]] = [
+						vertices[pos_in_ind_arr],
+						tex_uvs[pos_in_ind_arr],
+					]
 			else:
 				pos_in_ind_arr -= 1
 		
@@ -311,12 +326,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			)
 			return FAILED
 		
-		Array(tex_dict.get(tex_name)).append(
-			{
-				"indices": tri_indices,
-				"pairs": vert_ind_pairs
-			}
-		)
+		surf_dict.get(lm_name).get(tex_name)[
+			"indices"
+		] = tri_indices
+		surf_dict.get(lm_name).get(tex_name)[
+			"pairs"
+		] = vert_ind_pairs
 	
 	# Get the invisible collision face count.
 	var invis_coll_count: int = file.get_32()
@@ -456,71 +471,69 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	var current_material_checked: bool = false
 	var current_loaded_material: Material = null
 	
-	# For each texture in the texture dictionary.
-	for i in tex_dict.keys() as Array[Dictionary]:
-		var tex_name: String = tex_dict.find_key(tex_dict.get(i)) as String
+	#var f = FileAccess.open("user://tex_dict.txt", FileAccess.WRITE)
+	#f.store_string(JSON.stringify(surf_dict, "    "))
+	
+	#return FAILED
+	for curr_tex in used_tex:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		# For each dictionary stored with the texture.
-		for j in Array(tex_dict.get(i)) as Array[Dictionary]:
-			# For each indice in the indices array.
-			var pairs: Dictionary = j.get("pairs") as Dictionary
-			for k in j.get("indices") as Array[int]:
-				# Set the texture UV.
-				st.set_uv(
-					Vector2(
-						Array(pairs.get(k))[1]
-					)
-				)
-				# Set the lightmap UV.
-				st.set_uv2(
-					Vector2(
-						Array(pairs.get(k))[2]
-					)
-				)
+		print(curr_tex)
+		for lm in surf_dict:
+			var lmd: Dictionary = surf_dict.get(lm) as Dictionary
+			if lmd.has(curr_tex):
+				var td: Dictionary = lmd.get(curr_tex) as Dictionary
+				var indices: PackedInt32Array = td.get(
+					"indices"
+				) as PackedInt32Array
+				var pairs: Dictionary = td.get(
+					"pairs"
+				) as Dictionary
 				
-				# Set the material.
-				if (
-					not mat_path == "" 
-					and not current_material_checked 
-					and not current_loaded_material
-				):
-					# Fix up material path so it works.
-					var n_mat_path: String = mat_path
-					if not n_mat_path.right(1) == "/":
-						n_mat_path += "/"
-					n_mat_path += tex_name.trim_suffix(
-						tex_name.get_extension()
-					) + "tres"
+				for i in indices:
+					var pairs_ind: Array = pairs.get(i) as Array
 					
-					# If we don't have a material loaded, we can
-					# check if it exists and load it. Then we say
-					# the material was checked. We only need to
-					# check it once to know if it exists or not.
-					if ResourceLoader.exists(
-						n_mat_path, "Material"
+					st.set_uv(pairs_ind[1])
+					
+					# Set the material.
+					if (
+						not mat_path == "" 
+						and not current_material_checked 
+						and not current_loaded_material
 					):
-						current_loaded_material = load(n_mat_path)
-					current_material_checked = true
-				# We then check if we have a material loaded
-				# after that process.
-				if current_loaded_material:
-					st.set_material(current_loaded_material)
-				
-				st.add_vertex(
-					Vector3(
-						Array(pairs.get(k))[0]
-					)
-				)
+						# Fix up material path so it works.
+						var n_mat_path: String = mat_path
+						if not n_mat_path.right(1) == "/":
+							n_mat_path += "/"
+						n_mat_path += curr_tex.trim_suffix(
+							curr_tex.get_extension()
+						) + "tres"
+						
+						# If we don't have a material loaded, we can
+						# check if it exists and load it. Then we say
+						# the material was checked. We only need to
+						# check it once to know if it exists or not.
+						if ResourceLoader.exists(
+							n_mat_path, "Material"
+						):
+							current_loaded_material = load(n_mat_path)
+						current_material_checked = true
+					# We then check if we have a material loaded
+					# after that process.
+					if current_loaded_material:
+						st.set_material(current_loaded_material)
+					
+					st.add_vertex(pairs_ind[0])
 		
 		st.generate_normals()
 		st.commit(arr_mesh)
 		st.clear()
 		arr_mesh.surface_set_name(
 			arr_mesh.get_surface_count() - 1, 
-			tex_name.trim_suffix(
-				tex_name.get_extension()
+			curr_tex.trim_suffix(
+				curr_tex.get_extension()
 			).rstrip(".")
 		)
+		
 		current_loaded_material = null
 		current_material_checked = false
 	
