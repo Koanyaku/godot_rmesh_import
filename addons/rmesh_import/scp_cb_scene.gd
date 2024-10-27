@@ -4,6 +4,10 @@ extends EditorImportPlugin
 
 enum PRESETS { DEFAULT }
 
+const LIGHTMAP_SHADER: Shader = preload(
+	"res://addons/rmesh_import/lightmap.gdshader"
+)
+
 
 # Fix crash when importing multiple files with threads.
 # Hopefully this will be resolved in Godot 4.4.
@@ -353,20 +357,29 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				var invis_coll_vert_count: int = file.get_32()
 				
 				# Get the invisible collision vertices.
-				var invis_coll_vertices: PackedVector3Array = PackedVector3Array()
+				var invis_coll_vertices: PackedVector3Array = (
+					PackedVector3Array()
+				)
 				for j in invis_coll_vert_count:
-					# The actual data for each invisible collision vertex
-					# takes up 12 bytes. Only the X, Y and Z positions get
-					# saved with invisible collision vertices. Other than
-					# that, we do mostly the same things as with normal
-					# face vertices.
+					# The actual data for each invisible 
+					# collision vertex takes up 12 bytes. 
+					# Only the X, Y and Z positions get saved
+					# with invisible collision vertices.
+					# Other than that, we do mostly the same
+					# things as with normal face vertices.
 					var invis_coll_vertex_data: PackedByteArray = (
 						file.get_buffer(12)
 					)
 					
-					var pos_x: float = invis_coll_vertex_data.decode_float(0)
-					var pos_y: float = invis_coll_vertex_data.decode_float(4)
-					var pos_z: float = invis_coll_vertex_data.decode_float(8)
+					var pos_x: float = (
+						invis_coll_vertex_data.decode_float(0)
+					)
+					var pos_y: float = (
+						invis_coll_vertex_data.decode_float(4)
+					)
+					var pos_z: float = (
+						invis_coll_vertex_data.decode_float(8)
+					)
 					invis_coll_vertices.append(
 						Vector3(pos_x, pos_y, -pos_z)
 						* scale_mesh
@@ -379,24 +392,30 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				var invis_coll_tri_count: int = file.get_32()
 				
 				# Get the invisible collision triangle indices.
-				var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array()
+				var invis_coll_tri_indices: PackedInt32Array = (
+					PackedInt32Array()
+				)
 				for j in invis_coll_tri_count * 3:
 					# Each indice is stored as 4 bytes.
 					invis_coll_tri_indices.append(file.get_32())
 				
 				# The triangle indice count must be a multiple
 				# of the triangle count.
-				if invis_coll_tri_indices.size() % invis_coll_tri_count:
+				if (
+					invis_coll_tri_indices.size()
+					% invis_coll_tri_count
+				):
 					push_error(
 						"SCP-CB Scene import -"
-						+ " Invisible collision triangle indice count"
-						+ " is not a multiple of the invisible"
-						+ " collision triangle count"
-						+ " (indice count is " 
+						+ " Invisible collision triangle indice"
+						+ " count is not a multiple of the"
+						+ " invisible collision triangle count"
+						+ " (indice count is "
 						+ str(invis_coll_tri_indices.size())
 						+ ", triangle count is " 
 						+ str(invis_coll_tri_count) + ", " 
-						+ str(invis_coll_tri_indices.size()) + " mod "
+						+ str(invis_coll_tri_indices.size())
+						+ " mod "
 						+ str(invis_coll_tri_count) + " = "
 						+ str(
 							invis_coll_tri_indices.size()
@@ -434,9 +453,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						+ " vertice-indice pairs array size"
 						+ " doesn't match invisible collision"
 						+ " vertices array size. Every indice"
-						+ " should have one set of vertices assigned to it."
-						+ " (vertice-indice pairs array size: " 
-						+ str(invis_coll_vert_ind_pairs.size()) 
+						+ " should have one set of vertices"
+						+ " assigned to it."
+						+ " (vertice-indice pairs array size: "
+						+ str(invis_coll_vert_ind_pairs.size())
 						+ ", vertices array size: "
 						+ str(invis_coll_vertices.size())
 						+ ")"
@@ -468,20 +488,94 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	var mat_path: String = options.get(
 		"materials/material_path"
 	) as String
-	var current_material_checked: bool = false
-	var current_loaded_material: Material = null
 	
-	#var f = FileAccess.open("user://tex_dict.txt", FileAccess.WRITE)
-	#f.store_string(JSON.stringify(surf_dict, "    "))
-	
-	#return FAILED
-	for curr_tex in used_tex:
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		print(curr_tex)
+	if not include_lm:
+		var current_material_checked: bool = false
+		var current_loaded_material: Material = null
+		
+		for curr_tex in used_tex:
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			for lm in surf_dict:
+				var lmd: Dictionary = surf_dict.get(
+					lm
+				) as Dictionary
+				if lmd.has(curr_tex):
+					var td: Dictionary = lmd.get(
+						curr_tex
+					) as Dictionary
+					var indices: PackedInt32Array = td.get(
+						"indices"
+					) as PackedInt32Array
+					var pairs: Dictionary = td.get(
+						"pairs"
+					) as Dictionary
+					
+					for i in indices:
+						var pairs_ind: Array = pairs.get(i) as Array
+						
+						st.set_uv(pairs_ind[1])
+						
+						# Set the material.
+						if (
+							not mat_path == "" 
+							and not current_material_checked 
+							and not current_loaded_material
+						):
+							# Fix up material path so it works.
+							var n_mat_path: String = mat_path
+							if not n_mat_path.right(1) == "/":
+								n_mat_path += "/"
+							n_mat_path += curr_tex.trim_suffix(
+								curr_tex.get_extension()
+							) + "tres"
+							
+							# If we don't have a material loaded, we can
+							# check if it exists and load it. Then we say
+							# the material was checked. We only need to
+							# check it once to know if it exists or not.
+							if ResourceLoader.exists(
+								n_mat_path, "Material"
+							):
+								current_loaded_material = load(
+									n_mat_path
+								)
+							current_material_checked = true
+						# We then check if we have a material loaded
+						# after that process.
+						if current_loaded_material:
+							st.set_material(current_loaded_material)
+						
+						st.add_vertex(pairs_ind[0])
+			
+			st.generate_normals()
+			st.commit(arr_mesh)
+			st.clear()
+			arr_mesh.surface_set_name(
+				arr_mesh.get_surface_count() - 1, 
+				curr_tex.trim_suffix(
+					curr_tex.get_extension()
+				).rstrip(".")
+			)
+			
+			current_loaded_material = null
+			current_material_checked = false
+	else:
+		var current_tex_checked: bool = false
+		var current_loaded_tex: Texture2D = null
+		
+		var current_lm_tex_checked: bool = false
+		var current_loaded_lm_tex: Texture2D = null
+		
+		var lm_index = 1
 		for lm in surf_dict:
-			var lmd: Dictionary = surf_dict.get(lm) as Dictionary
-			if lmd.has(curr_tex):
-				var td: Dictionary = lmd.get(curr_tex) as Dictionary
+			var lmd: Dictionary = surf_dict.get(
+				lm
+			) as Dictionary
+			for tex in lmd:
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				var td: Dictionary = lmd.get(
+					tex
+				) as Dictionary
 				var indices: PackedInt32Array = td.get(
 					"indices"
 				) as PackedInt32Array
@@ -490,52 +584,110 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				) as Dictionary
 				
 				for i in indices:
-					var pairs_ind: Array = pairs.get(i) as Array
+					var pairs_ind: Array = pairs.get(
+						i
+					) as Array
 					
 					st.set_uv(pairs_ind[1])
+					st.set_uv2(pairs_ind[2])
 					
 					# Set the material.
+					var lm_mat: ShaderMaterial = ShaderMaterial.new()
+					lm_mat.shader = LIGHTMAP_SHADER
+					
 					if (
-						not mat_path == "" 
-						and not current_material_checked 
-						and not current_loaded_material
+						not mat_path == ""
+						and not current_tex_checked
+						and not current_loaded_tex
 					):
 						# Fix up material path so it works.
-						var n_mat_path: String = mat_path
-						if not n_mat_path.right(1) == "/":
-							n_mat_path += "/"
-						n_mat_path += curr_tex.trim_suffix(
-							curr_tex.get_extension()
-						) + "tres"
+						var new_tex_path: String = mat_path
+						if not new_tex_path.right(1) == "/":
+							new_tex_path += "/"
+						new_tex_path += tex
 						
-						# If we don't have a material loaded, we can
+						# If we don't have a texture loaded, we can
 						# check if it exists and load it. Then we say
-						# the material was checked. We only need to
+						# the texture was checked. We only need to
 						# check it once to know if it exists or not.
 						if ResourceLoader.exists(
-							n_mat_path, "Material"
+							new_tex_path, "Texture2D"
 						):
-							current_loaded_material = load(n_mat_path)
-						current_material_checked = true
-					# We then check if we have a material loaded
-					# after that process.
-					if current_loaded_material:
-						st.set_material(current_loaded_material)
+							current_loaded_tex = load(
+								new_tex_path
+							)
+						current_tex_checked = true
 					
+					# We then check if we have a texture loaded
+					# after that process.
+					if current_loaded_tex:
+						lm_mat.set_shader_parameter(
+							"texture_albedo",
+							current_loaded_tex
+						)
+					
+					if (
+						not current_lm_tex_checked
+						and not current_loaded_lm_tex
+					):
+						# Fix up material path so it works.
+						var new_lm_tex_path: String = (
+							source_file.get_base_dir()
+							+ "/"
+							+ lm
+						)
+						
+						# If we don't have a lightmap texture loaded,
+						# we can check if it exists and load it.
+						# Then we say the texture was checked.
+						# We only need tocheck it once to know if
+						# it exists or not.
+						if ResourceLoader.exists(
+							new_lm_tex_path, "Texture2D"
+						):
+							current_loaded_lm_tex = load(
+								new_lm_tex_path
+							)
+						current_lm_tex_checked = true
+					
+					# We then check if we have a lightmap 
+					# texture loaded after that process.
+					if current_loaded_lm_tex:
+						lm_mat.set_shader_parameter(
+							"texture_lightmap",
+							current_loaded_lm_tex
+						)
+					
+					st.set_material(lm_mat)
 					st.add_vertex(pairs_ind[0])
-		
-		st.generate_normals()
-		st.commit(arr_mesh)
-		st.clear()
-		arr_mesh.surface_set_name(
-			arr_mesh.get_surface_count() - 1, 
-			curr_tex.trim_suffix(
-				curr_tex.get_extension()
-			).rstrip(".")
-		)
-		
-		current_loaded_material = null
-		current_material_checked = false
+				
+				st.generate_normals()
+				st.commit(arr_mesh)
+				st.clear()
+				
+				if not lm == "none":
+					arr_mesh.surface_set_name(
+						arr_mesh.get_surface_count() - 1,
+						tex.trim_suffix(
+							tex.get_extension()
+						).rstrip(".")
+						+ "_lm" + str(lm_index)
+					)
+				else:
+					arr_mesh.surface_set_name(
+						arr_mesh.get_surface_count() - 1,
+						tex.trim_suffix(
+							tex.get_extension()
+						).rstrip(".")
+					)
+				
+				current_loaded_tex = null
+				current_tex_checked = false
+				current_loaded_lm_tex = null
+				current_lm_tex_checked = false
+			
+			if not lm == "none":
+				lm_index += 1
 	
 	# Add the mesh to the scene as a MeshInstance3D.
 	var arr_mesh_instance: MeshInstance3D = MeshInstance3D.new()
@@ -744,9 +896,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							+ " vertice-indice pairs array size"
 							+ " doesn't match trigger box"
 							+ " vertices array size. Every indice"
-							+ " should have one set of vertices assigned to it."
-							+ " (vertice-indice pairs array size: " 
-							+ str(curr_trb_vert_ind_pairs.size()) 
+							+ " should have one set of"
+							+ " vertices assigned to it."
+							+ " (vertice-indice pairs array size: "
+							+ str(curr_trb_vert_ind_pairs.size())
 							+ ", vertices array size: "
 							+ str(curr_trb_vertices.size())
 							+ ")"
