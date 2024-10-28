@@ -88,7 +88,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	# Get the header. It should either be "RoomMesh" 
 	# or "RoomMesh.HasTriggerBox".
-	var header: String = read_b3d_string(file)
+	var header: String = file.get_pascal_string()
 	if (
 		not header == "RoomMesh" 
 		and not header == "RoomMesh.HasTriggerBox"
@@ -139,7 +139,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		lm_flag = file.get_8()
 		var lm_name: String = ""
 		if lm_flag == 2:
-			lm_name = read_b3d_string(file)
+			lm_name = file.get_pascal_string()
 		else:
 			# If a lightmap doesn't exist for this texture,
 			# there's a 4-byte padding after the flag.
@@ -155,7 +155,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			)
 			return FAILED
 		
-		var tex_name: String = read_b3d_string(file)
+		var tex_name: String = file.get_pascal_string()
 		if !tex_dict.has(tex_name):
 			tex_dict[tex_name] = [] as Array[Dictionary]
 		
@@ -465,11 +465,3 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		arr_mesh, 
 		"%s.%s" % [save_path, _get_save_extension()]
 	)
-
-
-func read_b3d_string(file: FileAccess) -> String:
-	var len: int = file.get_32()
-	var string: String = (
-		file.get_buffer(len).get_string_from_utf8()
-	)
-	return string

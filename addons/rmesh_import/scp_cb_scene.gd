@@ -161,7 +161,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	# Get the header. It should either be "RoomMesh" 
 	# or "RoomMesh.HasTriggerBox".
-	var header: String = read_b3d_string(file)
+	var header: String = file.get_pascal_string()
 	if (
 		not header == "RoomMesh" 
 		and not header == "RoomMesh.HasTriggerBox"
@@ -217,7 +217,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		lm_flag = file.get_8()
 		var lm_name: String = ""
 		if lm_flag == 2:
-			lm_name = read_b3d_string(file)
+			lm_name = file.get_pascal_string()
 		else:
 			# If a lightmap doesn't exist for this texture,
 			# there's a 4-byte padding after the flag.
@@ -234,7 +234,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			)
 			return FAILED
 		
-		var tex_name: String = read_b3d_string(file)
+		var tex_name: String = file.get_pascal_string()
 		if not surf_dict.has(lm_name):
 			surf_dict[lm_name] = {}
 		if not surf_dict.get(lm_name).has(tex_name):
@@ -943,7 +943,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						return FAILED
 					
-					var curr_trb_name: String = read_b3d_string(file)
+					var curr_trb_name: String = file.get_pascal_string()
 					
 					var curr_trb_area_node: Area3D = Area3D.new()
 					curr_trb_area_node.name = curr_trb_name
@@ -980,7 +980,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					for k in curr_trb_tri_count * 3:
 						file.get_32()
 					# Trigger box name
-					read_b3d_string(file) 
+					file.get_pascal_string() 
 	
 	var include_screens: bool = options.get(
 		"entities/screens/include_screens"
@@ -1036,7 +1036,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		var ent_count: int = file.get_32()
 		for i in ent_count as int:
-			var ent_name: String = read_b3d_string(file)
+			var ent_name: String = file.get_pascal_string()
 			match(ent_name):
 				"screen":
 					# Get screen position. Each X, Y and Z
@@ -1049,7 +1049,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					) * scale_mesh
 					
 					# Get screen image file path.
-					var img_path: String = read_b3d_string(file)
+					var img_path: String = file.get_pascal_string()
 					
 					if include_screens:
 						if not screens_folder_node:
@@ -1119,7 +1119,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					)
 					
 					# Get light color string.
-					var color_string = read_b3d_string(file)
+					var color_string = file.get_pascal_string()
 					var split_color_string: PackedStringArray = (
 						color_string.split(" ")
 					)
@@ -1175,7 +1175,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					)
 					
 					# Get spotlight color string.
-					var color_string = read_b3d_string(file)
+					var color_string = file.get_pascal_string()
 					var split_color_string: PackedStringArray = (
 						color_string.split(" ")
 					)
@@ -1189,7 +1189,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					var intensity: float = file.get_float()
 					
 					# Get spotlight angles string.
-					var angles: String = read_b3d_string(file)
+					var angles: String = file.get_pascal_string()
 					var angles_split: PackedStringArray = (
 						angles.split(" ")
 					)
@@ -1277,7 +1277,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					) * scale_mesh
 					
 					# Get player start angles string.
-					var angles: String = read_b3d_string(file)
+					var angles: String = file.get_pascal_string()
 					var angles_split: PackedStringArray = (
 						angles.split(" ")
 					)
@@ -1308,7 +1308,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						pl_start_node.owner = saved_scene_root
 				"model":
 					# Get model file path.
-					var model_path: String = read_b3d_string(file)
+					var model_path: String = file.get_pascal_string()
 					
 					# Get model position. Each X, Y and Z
 					# position is a 4-byte float.
@@ -1378,11 +1378,3 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		saved_scene, 
 		"%s.%s" % [save_path, _get_save_extension()]
 	)
-
-
-func read_b3d_string(file: FileAccess) -> String:
-	var len: int = file.get_32()
-	var string: String = (
-		file.get_buffer(len).get_string_from_utf8()
-	)
-	return string
