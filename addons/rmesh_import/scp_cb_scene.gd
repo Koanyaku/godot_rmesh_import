@@ -65,8 +65,12 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 					"property_hint": PROPERTY_HINT_LINK,
 				},
 				{
-					"name": "mesh/include_lightmaps",
+					"name": "lightmaps/include_lightmaps",
 					"default_value": false,
+				},
+				{
+					"name": "lightmaps/light_multiplier",
+					"default_value": 1.0,
 				},
 				{
 					"name": "collision/generate_collision_mesh",
@@ -183,7 +187,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	var used_tex: PackedStringArray = PackedStringArray()
 	
 	var include_lm: bool = options.get(
-		"mesh/include_lightmaps"
+		"lightmaps/include_lightmaps"
 	) as bool
 	
 	# Each texture has a set amount of faces associated with it.
@@ -264,7 +268,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var lm_u = vertex_data.decode_float(20)
 			var lm_v = vertex_data.decode_float(24)
 			tex_uvs.append(Vector2(tex_u, tex_v))
-			lm_uvs.append(Vector2(lm_u, lm_v))
+			if include_lm:
+				lm_uvs.append(Vector2(lm_u, lm_v))
 			
 			# The data for each vertex ends with three
 			# 'RGB' bytes. Usually, they are just three FF bytes.
@@ -320,11 +325,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# associated with it.
 		if not vert_ind_pairs.size() == vertices.size():
 			push_error(
-				"SCP-CB Scene import - Vertice-indice pairs array size"
-				+ " doesn't match vertices array size. Every indice"
-				+ " should have one set of vertices assigned to it"
-				+ " (vertice-indice pairs array size: " 
-				+ str(vert_ind_pairs.size()) 
+				"SCP-CB Scene import - Vertice-indice pairs array"
+				+ " size doesn't match vertices array size."
+				+ " Every indice should have one set of vertices"
+				+ " assigned to it (vertice-indice pairs array"
+				+ " size: " + str(vert_ind_pairs.size())
 				+ ", vertices array size: " + str(vertices.size())
 				+ ")."
 			)
@@ -438,7 +443,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					):
 						invis_coll_vert_ind_pairs[
 							invis_coll_tri_indices[j]
-						] = invis_coll_vertices[pos_in_invis_coll_ind_arr]
+						] = invis_coll_vertices[
+							pos_in_invis_coll_ind_arr
+						]
 					else:
 						pos_in_invis_coll_ind_arr -= 1
 				
@@ -533,8 +540,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							# check if it exists and load it. Then we say
 							# the material was checked. We only need to
 							# check it once to know if it exists or not.
-							if ResourceLoader.exists(
-								n_mat_path, "Material"
+							if FileAccess.file_exists(
+								n_mat_path
 							):
 								current_loaded_material = load(
 									n_mat_path
@@ -560,8 +567,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			current_loaded_material = null
 			current_material_checked = false
 	else:
-		var current_tex_checked: bool = false
-		var current_loaded_tex: Texture2D = null
+		var current_material_checked: bool = false
+		var current_loaded_material: StandardMaterial3D = null
 		
 		var current_lm_tex_checked: bool = false
 		var current_loaded_lm_tex: Texture2D = null
@@ -572,6 +579,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				lm
 			) as Dictionary
 			for tex in lmd:
+				var lm_mat: ShaderMaterial = null
+				
 				st.begin(Mesh.PRIMITIVE_TRIANGLES)
 				var td: Dictionary = lmd.get(
 					tex
@@ -591,74 +600,121 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					st.set_uv(pairs_ind[1])
 					st.set_uv2(pairs_ind[2])
 					
-					# Set the material.
-					var lm_mat: ShaderMaterial = ShaderMaterial.new()
-					lm_mat.shader = LIGHTMAP_SHADER
-					
 					if (
-						not mat_path == ""
-						and not current_tex_checked
-						and not current_loaded_tex
+						not mat_path == "" 
+						and not current_material_checked 
+						and not current_loaded_material
 					):
 						# Fix up material path so it works.
-						var new_tex_path: String = mat_path
-						if not new_tex_path.right(1) == "/":
-							new_tex_path += "/"
-						new_tex_path += tex
+						var n_mat_path: String = mat_path
+						if not n_mat_path.right(1) == "/":
+							n_mat_path += "/"
+						n_mat_path += tex.trim_suffix(
+							tex.get_extension()
+						) + "tres"
 						
-						# If we don't have a texture loaded, we can
+						# If we don't have a material loaded, we can
 						# check if it exists and load it. Then we say
-						# the texture was checked. We only need to
+						# the material was checked. We only need to
 						# check it once to know if it exists or not.
-						if ResourceLoader.exists(
-							new_tex_path, "Texture2D"
+						if FileAccess.file_exists(
+							n_mat_path
 						):
-							current_loaded_tex = load(
-								new_tex_path
+							current_loaded_material = load(
+								n_mat_path
 							)
-						current_tex_checked = true
+						current_material_checked = true
 					
-					# We then check if we have a texture loaded
-					# after that process.
-					if current_loaded_tex:
-						lm_mat.set_shader_parameter(
-							"texture_albedo",
-							current_loaded_tex
-						)
-					
-					if (
-						not current_lm_tex_checked
-						and not current_loaded_lm_tex
-					):
-						# Fix up material path so it works.
-						var new_lm_tex_path: String = (
-							source_file.get_base_dir()
-							+ "/"
-							+ lm
-						)
-						
-						# If we don't have a lightmap texture loaded,
-						# we can check if it exists and load it.
-						# Then we say the texture was checked.
-						# We only need tocheck it once to know if
-						# it exists or not.
-						if ResourceLoader.exists(
-							new_lm_tex_path, "Texture2D"
+					if not lm == "none":
+						if (
+							not current_lm_tex_checked
+							and not current_loaded_lm_tex
 						):
-							current_loaded_lm_tex = load(
+							# Fix up material path so it works.
+							var new_lm_tex_path: String = (
+								source_file.get_base_dir()
+								+ "/"
+								+ lm
+							)
+							
+							# If we don't have a lightmap texture loaded,
+							# we can check if it exists and load it.
+							# Then we say the texture was checked.
+							# We only need tocheck it once to know if
+							# it exists or not.
+							if FileAccess.file_exists(
 								new_lm_tex_path
-							)
-						current_lm_tex_checked = true
-					
-					# We then check if we have a lightmap 
-					# texture loaded after that process.
-					if current_loaded_lm_tex:
-						lm_mat.set_shader_parameter(
-							"texture_lightmap",
+							):
+								current_loaded_lm_tex = load(
+									new_lm_tex_path
+								)
+							current_lm_tex_checked = true
+						
+						if (
 							current_loaded_lm_tex
-						)
+							and current_loaded_material
+						):
+							if not lm_mat:
+								lm_mat = ShaderMaterial.new()
+								lm_mat.shader = LIGHTMAP_SHADER
+							
+							if current_loaded_material.albedo_texture:
+								lm_mat.set_shader_parameter(
+									"texture_albedo",
+									current_loaded_material.albedo_texture
+								)
+							
+							if current_loaded_material.normal_texture:
+								lm_mat.set_shader_parameter(
+									"texture_normal",
+									current_loaded_material.normal_texture
+								)
+								lm_mat.set_shader_parameter(
+									"normal_scale",
+									current_loaded_material.normal_scale
+								)
+							
+							lm_mat.set_shader_parameter(
+								"texture_lightmap",
+								current_loaded_lm_tex
+							)
+							
+							lm_mat.set_shader_parameter(
+								"light_multiplier",
+								options.get(
+									"lightmaps/light_multiplier"
+								)
+							)
+							
+							st.set_material(lm_mat)
+						elif (
+							current_loaded_lm_tex
+							and not current_loaded_material
+						):
+							if not lm_mat:
+								lm_mat = ShaderMaterial.new()
+								lm_mat.shader = LIGHTMAP_SHADER
+							
+							lm_mat.set_shader_parameter(
+								"texture_lightmap",
+								current_loaded_lm_tex
+							)
+							
+							lm_mat.set_shader_parameter(
+								"light_multiplier",
+								options.get(
+									"lightmaps/light_multiplier"
+								)
+							)
+							st.set_material(lm_mat)
+						elif (
+							current_loaded_material
+							and not current_loaded_lm_tex
+						):
+							st.set_material(current_loaded_material)
+					elif current_loaded_material:
+						st.set_material(current_loaded_material)
 					
-					st.set_material(lm_mat)
 					st.add_vertex(pairs_ind[0])
 				
 				st.generate_normals()
@@ -681,10 +737,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						).rstrip(".")
 					)
 				
-				current_loaded_tex = null
-				current_tex_checked = false
 				current_loaded_lm_tex = null
 				current_lm_tex_checked = false
+				
+				current_loaded_material = null
+				current_material_checked = false
 			
 			if not lm == "none":
 				lm_index += 1
