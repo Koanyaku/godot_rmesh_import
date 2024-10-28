@@ -551,6 +551,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			st.generate_normals()
 			st.commit(arr_mesh)
 			st.clear()
+			# WARNING: Textures that are from different
+			# folders but share the same filename will
+			# not be differentiated, and will be treated
+			# as the same texture.
 			arr_mesh.surface_set_name(
 				arr_mesh.get_surface_count() - 1, 
 				curr_tex.get_file().trim_suffix(
@@ -715,6 +719,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				st.commit(arr_mesh)
 				st.clear()
 				
+				# WARNING: Textures that are from different
+				# folders but share the same filename will
+				# not be differentiated, and will be treated
+				# as the same texture.
 				if not lm == "none":
 					arr_mesh.surface_set_name(
 						arr_mesh.get_surface_count() - 1,
@@ -750,22 +758,33 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# Generating the collision mesh.
 	if generate_coll:
 		if bool(options.get("collision/split_collision_mesh")):
-			# If we want to create a separate collision shape for
-			# each surface, we have to iterate through each
-			# surface of the entire ArrayMesh, get the arrays of
-			# the given surface, generate a new ArrayMesh from
-			# those arrays and then generate a trimesh collision
-			# from the new ArrayMesh.
+			# We have to iterate through each used texture.
+			# We can't just iterate through each surface in
+			# the mesh due to lightmaps, since with them,
+			# there can be multiple surfaces using the
+			# same texture. 
 			for tex in used_tex:
+				# Get only the texture filename without
+				# the extension.
+				# WARNING: Textures that are from different
+				# folders but share the same filename will
+				# not be differentiated, and will be treated
+				# as the same texture.
 				var tex_name = tex.get_file().trim_suffix(
 					tex.get_extension()
 				).rstrip(".")
 				
+				# The array that will hold the surface arrays
+				# from all the different surfaces using
+				# the current texture.
 				var surf_arrays: Array[Array] = []
 				for i in arr_mesh.get_surface_count():
 					var surf_name: String = (
 						arr_mesh.surface_get_name(i)
 					)
+					# Get the surface name's suffix.
+					# Surface names of meshes with lightmaps
+					# end with something like "_lm".
 					var surf_name_suffix: String = (
 						surf_name.split("_") as Array
 					).back() as String
@@ -776,10 +795,19 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							"_" + surf_name_suffix
 						) == tex_name
 					):
+						# We don't care about lightmaps when
+						# getting all the surfaces with a specific
+						# texture, so we need to check against
+						# a surface name that's without the
+						# lightmap suffix. If this fixed surface
+						# name the texture name, we add it to
+						# the array.
 						surf_arrays.append(
 							arr_mesh.surface_get_arrays(i)
 						)
 					elif surf_name == tex_name:
+						# If the surface name the texture name,
+						# we add it to the array.
 						surf_arrays.append(
 							arr_mesh.surface_get_arrays(i)
 						)

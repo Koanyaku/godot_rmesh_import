@@ -52,6 +52,17 @@ func get_entity_rotation(file: FileAccess) -> Vector3:
 	return rot
 
 
+func get_entity_scale(file: FileAccess) -> Vector3:
+	# Each X, Y and Z scale is a 4-byte float.
+	var scale_x: float = file.get_float()
+	var scale_y: float = file.get_float()
+	var scale_z: float = file.get_float()
+	var scale: Vector3 = Vector3(
+		scale_x, scale_y, -scale_z
+	)
+	return scale
+
+
 func get_rotation_from_angles(angles: String) -> Vector3:
 	var angles_split: PackedStringArray = (
 		angles.split(" ")
@@ -74,14 +85,3 @@ func get_color_from_string(color: String) -> Color:
 		int(split_color_string[2])
 	)
 	return new_color
-
-
-func get_entity_scale(file: FileAccess) -> Vector3:
-	# Each X, Y and Z scale is a 4-byte float.
-	var scale_x: float = file.get_float()
-	var scale_y: float = file.get_float()
-	var scale_z: float = file.get_float()
-	var scale: Vector3 = Vector3(
-		scale_x, scale_y, -scale_z
-	)
-	return scale
