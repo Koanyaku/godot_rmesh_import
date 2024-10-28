@@ -349,6 +349,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	var include_invis_coll: bool = options.get(
 		"collision/include_invisible_collisions"
 	) as bool
+	
 	var generate_coll: bool = options.get(
 		"collision/generate_collision_mesh"
 	) as bool
@@ -435,7 +436,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				# For each invisible collision indice, give it it's
 				# corresponding vertex.
 				var invis_coll_vert_ind_pairs: Dictionary = (
-					helper_funcs.create_vertice_indice_pairs(
+					helper_funcs.create_vert_ind_pairs(
 						invis_coll_vertices,
 						invis_coll_tri_indices
 					)
@@ -552,7 +553,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			st.clear()
 			arr_mesh.surface_set_name(
 				arr_mesh.get_surface_count() - 1, 
-				curr_tex.trim_suffix(
+				curr_tex.get_file().trim_suffix(
 					curr_tex.get_extension()
 				).rstrip(".")
 			)
@@ -571,7 +572,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var lmd: Dictionary = surf_dict.get(
 				lm
 			) as Dictionary
-			for tex in lmd:
+			for tex: String in lmd:
 				var lm_mat: ShaderMaterial = null
 				
 				st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -717,7 +718,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				if not lm == "none":
 					arr_mesh.surface_set_name(
 						arr_mesh.get_surface_count() - 1,
-						tex.trim_suffix(
+						tex.get_file().trim_suffix(
 							tex.get_extension()
 						).rstrip(".")
 						+ "_lm" + str(lm_index)
@@ -725,7 +726,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				else:
 					arr_mesh.surface_set_name(
 						arr_mesh.get_surface_count() - 1,
-						tex.trim_suffix(
+						tex.get_file().trim_suffix(
 							tex.get_extension()
 						).rstrip(".")
 					)
@@ -755,24 +756,46 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			# the given surface, generate a new ArrayMesh from
 			# those arrays and then generate a trimesh collision
 			# from the new ArrayMesh.
-			for i in arr_mesh.get_surface_count():
-				var surf_arrays: Array = (
-					arr_mesh.surface_get_arrays(i)
-				)
+			for tex in used_tex:
+				var tex_name = tex.get_file().trim_suffix(
+					tex.get_extension()
+				).rstrip(".")
+				
+				var surf_arrays: Array[Array] = []
+				for i in arr_mesh.get_surface_count():
+					var surf_name: String = (
+						arr_mesh.surface_get_name(i)
+					)
+					var surf_name_suffix: String = (
+						surf_name.split("_") as Array
+					).back() as String
+					
+					if (
+						surf_name_suffix.begins_with("lm")
+						and surf_name.trim_suffix(
+							"_" + surf_name_suffix
+						) == tex_name
+					):
+						surf_arrays.append(
+							arr_mesh.surface_get_arrays(i)
+						)
+					elif surf_name == tex_name:
+						surf_arrays.append(
+							arr_mesh.surface_get_arrays(i)
+						)
 				
 				var new_arr_mesh: ArrayMesh = ArrayMesh.new()
-				new_arr_mesh.add_surface_from_arrays(
-					Mesh.PRIMITIVE_TRIANGLES, surf_arrays
-				)
+				for surf in surf_arrays:
+					new_arr_mesh.add_surface_from_arrays(
+						Mesh.PRIMITIVE_TRIANGLES, surf
+					)
 				
 				var coll_body: StaticBody3D = StaticBody3D.new()
-				var coll_body_name: String = (
-					arr_mesh.surface_get_name(i).get_file()
-				)
-				if not coll_body_name.ends_with("_collision"):
-					coll_body_name += "_collision"
+				var coll_body_name: String = tex_name
+				if not coll_body_name.ends_with("_coll"):
+					coll_body_name += "_coll"
 				coll_body.name = coll_body_name
-				arr_mesh_instance.add_child(coll_body)
+				saved_scene_root.add_child(coll_body)
 				coll_body.owner = saved_scene_root
 				
 				var coll_shape: CollisionShape3D = (
@@ -789,8 +812,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				coll_shape.owner = saved_scene_root
 		else:
 			var coll_body: StaticBody3D = StaticBody3D.new()
-			coll_body.name = saved_scene_root_name + "_collision"
-			arr_mesh_instance.add_child(coll_body)
+			coll_body.name = saved_scene_root_name + "_coll"
+			saved_scene_root.add_child(coll_body)
 			coll_body.owner = saved_scene_root
 			
 			var coll_shape: CollisionShape3D = CollisionShape3D.new()
@@ -811,14 +834,16 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				var pairs: Dictionary = i.get(
 					"pairs"
 				) as Dictionary
-				for j in i.get("indices") as Array[int]:
-					invis_st.add_vertex(pairs.get(j))
+				
+				for j in i.get("indices"):
+					invis_st.add_vertex(pairs.get(j)[0])
+			
 			invis_st.generate_normals()
 			var invis_arr_mesh: ArrayMesh = invis_st.commit()
 			
 			var coll_body: StaticBody3D = StaticBody3D.new()
-			coll_body.name = "invisible_collision"
-			arr_mesh_instance.add_child(coll_body)
+			coll_body.name = "invis_coll"
+			saved_scene_root.add_child(coll_body)
 			coll_body.owner = saved_scene_root
 			
 			var coll_shape: CollisionShape3D = CollisionShape3D.new()
@@ -1039,14 +1064,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var ent_name: String = file.get_pascal_string()
 			match(ent_name):
 				"screen":
-					# Get screen position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get screen position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get screen image file path.
 					var img_path: String = file.get_pascal_string()
@@ -1068,14 +1089,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						screen_node.owner = saved_scene_root
 				"waypoint":
-					# Get waypoint position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get waypoint position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					if include_waypoints:
 						if not waypoints_folder_node:
@@ -1103,14 +1120,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					# more if you want to get them to look the same
 					# (or almost the same) as in SCP-CB.
 					
-					# Get light position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get light position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get light range. 4-byte float.
 					var range: float = (
@@ -1120,13 +1133,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					# Get light color string.
 					var color_string = file.get_pascal_string()
-					var split_color_string: PackedStringArray = (
-						color_string.split(" ")
-					)
-					var actual_color = Color8(
-						int(split_color_string[0]),
-						int(split_color_string[1]),
-						int(split_color_string[2])
+					var actual_color: Color = (
+						helper_funcs.get_color_from_string(
+							color_string
+						)
 					)
 					
 					# Get light intensity. 4-byte float.
@@ -1159,14 +1169,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					# more if you want to get them to look the same
 					# (or almost the same) as in SCP-CB.
 					
-					# Get spotlight position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get spotlight position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get spotlight range. 4-byte float.
 					var range: float = (
@@ -1176,13 +1182,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					# Get spotlight color string.
 					var color_string = file.get_pascal_string()
-					var split_color_string: PackedStringArray = (
-						color_string.split(" ")
-					)
-					var actual_color = Color8(
-						int(split_color_string[0]),
-						int(split_color_string[1]),
-						int(split_color_string[2])
+					var actual_color: Color = (
+						helper_funcs.get_color_from_string(
+							color_string
+						)
 					)
 					
 					# Get spotlight intensity. 4-byte float.
@@ -1190,13 +1193,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					# Get spotlight angles string.
 					var angles: String = file.get_pascal_string()
-					var angles_split: PackedStringArray = (
-						angles.split(" ")
-					)
-					var rot_from_angles: Vector3 = Vector3(
-						-int(angles_split[0]),
-						int(angles_split[1]),
-						int(angles_split[2])
+					var rot: Vector3 = (
+						helper_funcs.get_rotation_from_angles(
+							angles
+						)
 					)
 					
 					# Get spotlight inner cone angle. 4-byte int.
@@ -1220,7 +1220,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						spotlight_node.name = "spotlight"
 						spotlight_node.position = pos
-						spotlight_node.rotation_degrees = rot_from_angles
+						spotlight_node.rotation_degrees = rot
 						spotlight_node.spot_range = range
 						spotlight_node.spot_angle = outer_cone_angle
 						spotlight_node.light_color = actual_color
@@ -1230,14 +1230,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						spotlight_node.owner = saved_scene_root
 				"soundemitter":
-					# Get sound emitter position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get sound emitter position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get sound index. 4-byte int.
 					var snd_ind: int = file.get_32()
@@ -1267,24 +1263,17 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						emitter_node.owner = saved_scene_root
 				"playerstart":
-					# Get player start position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get player start position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get player start angles string.
 					var angles: String = file.get_pascal_string()
-					var angles_split: PackedStringArray = (
-						angles.split(" ")
-					)
-					var rot_from_angles: Vector3 = Vector3(
-						-int(angles_split[0]),
-						int(angles_split[1]),
-						int(angles_split[2])
+					var rot: Vector3 = (
+						helper_funcs.get_rotation_from_angles(
+							angles
+						)
 					)
 					
 					if include_pl_starts:
@@ -1301,7 +1290,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						var pl_start_node: Node3D = Node3D.new()
 						pl_start_node.name = "playerstart"
 						pl_start_node.position = pos
-						pl_start_node.rotation_degrees = rot_from_angles
+						pl_start_node.rotation_degrees = rot
 						pl_starts_folder_node.add_child(
 							pl_start_node, true
 						)
@@ -1310,40 +1299,19 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					# Get model file path.
 					var model_path: String = file.get_pascal_string()
 					
-					# Get model position. Each X, Y and Z
-					# position is a 4-byte float.
-					# CBRE-EX 'X' position
-					var pos_x: float = file.get_float()
-					# CBRE-EX 'Z' position
-					var pos_y: float = file.get_float()
-					# CBRE-EX 'Y' position
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
-					
-					# Get model rotation. Each X, Y and Z
-					# rotation is a 4-byte float.
-					# CBRE-EX 'X' rotation
-					var rot_x: float = file.get_float()
-					# CBRE-EX 'Z' rotation
-					var rot_y: float = file.get_float()
-					# CBRE-EX 'Y' rotation
-					var rot_z: float = file.get_float()
-					var rot: Vector3 = Vector3(
-						rot_x, rot_y, -rot_z
+					# Get model position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
 					)
 					
-					# Get model scale. Each X, Y and Z scale
-					# is a 4-byte float.
-					# CBRE-EX 'X' scale
-					var scale_x: float = file.get_float()
-					# CBRE-EX 'Z' scale
-					var scale_y: float = file.get_float()
-					# CBRE-EX 'Y' scale
-					var scale_z: float = file.get_float()
-					var scale: Vector3 = Vector3(
-						scale_x, scale_y, -scale_z
+					# Get model rotation.
+					var rot: Vector3 = helper_funcs.get_entity_rotation(
+						file
+					)
+					
+					# Get model scale.
+					var scale: Vector3 = helper_funcs.get_entity_scale(
+						file
 					)
 					
 					if include_models:
