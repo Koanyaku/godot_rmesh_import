@@ -8,6 +8,10 @@ const LIGHTMAP_SHADER: Shader = preload(
 	"res://addons/rmesh_import/lightmap.gdshader"
 )
 
+var helper_funcs = preload(
+	"res://addons/rmesh_import/helper_funcs.gd"
+).new()
+
 
 # Fix crash when importing multiple files with threads.
 # Hopefully this will be resolved in Godot 4.4.
@@ -182,8 +186,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# Get the texture count.
 	var tex_count: int = file.get_32()
 	
+	# We accumulate all the data about the surfaces into this
+	# surface dictionary.
 	var surf_dict: Dictionary = {}
 	
+	# Array of all the textures used in the file. There's only
+	# one of each texture used. Helpful when constructing the
+	# mesh later.
 	var used_tex: PackedStringArray = PackedStringArray()
 	
 	var include_lm: bool = options.get(
@@ -301,25 +310,18 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# For each indice, give it it's corresponding vertex,
 		# texture UV and lightmap UV.
 		var vert_ind_pairs: Dictionary = {}
-		var pos_in_ind_arr: int = -1
-		for j in tri_indices.size() as int:
-			pos_in_ind_arr += 1
-			# If an indice already has vertex data associated 
-			# with it, we know we can just skip it.
-			if not vert_ind_pairs.has(tri_indices[j]):
-				if include_lm:
-					vert_ind_pairs[tri_indices[j]] = [
-						vertices[pos_in_ind_arr],
-						tex_uvs[pos_in_ind_arr],
-						lm_uvs[pos_in_ind_arr],
-					]
-				else:
-					vert_ind_pairs[tri_indices[j]] = [
-						vertices[pos_in_ind_arr],
-						tex_uvs[pos_in_ind_arr],
-					]
-			else:
-				pos_in_ind_arr -= 1
+		if include_lm:
+			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+				vertices,
+				tri_indices,
+				[tex_uvs, lm_uvs]
+			)
+		else:
+			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+				vertices,
+				tri_indices,
+				[tex_uvs]
+			)
 		
 		# Every vertex should have only one indice
 		# associated with it.
@@ -432,22 +434,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				
 				# For each invisible collision indice, give it it's
 				# corresponding vertex.
-				var invis_coll_vert_ind_pairs: Dictionary = {}
-				var pos_in_invis_coll_ind_arr: int = -1
-				for j in invis_coll_tri_indices.size():
-					pos_in_invis_coll_ind_arr += 1
-					# If an indice already has vertex data associated
-					# with it, we know we can just skip it.
-					if not invis_coll_vert_ind_pairs.has(
-						invis_coll_tri_indices[j]
-					):
-						invis_coll_vert_ind_pairs[
-							invis_coll_tri_indices[j]
-						] = invis_coll_vertices[
-							pos_in_invis_coll_ind_arr
-						]
-					else:
-						pos_in_invis_coll_ind_arr -= 1
+				var invis_coll_vert_ind_pairs: Dictionary = (
+					helper_funcs.create_vertice_indice_pairs(
+						invis_coll_vertices,
+						invis_coll_tri_indices
+					)
+				)
 				
 				# Every invisible collision vertex should have only
 				# one indice associated with it.
@@ -497,8 +489,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	) as String
 	
 	if not include_lm:
-		var current_material_checked: bool = false
-		var current_loaded_material: Material = null
+		var curr_mat_checked: bool = false
+		var curr_loaded_mat: Material = null
 		
 		for curr_tex in used_tex:
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -525,8 +517,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						# Set the material.
 						if (
 							not mat_path == "" 
-							and not current_material_checked 
-							and not current_loaded_material
+							and not curr_mat_checked 
+							and not curr_loaded_mat
 						):
 							# Fix up material path so it works.
 							var n_mat_path: String = mat_path
@@ -536,21 +528,22 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 								curr_tex.get_extension()
 							) + "tres"
 							
-							# If we don't have a material loaded, we can
-							# check if it exists and load it. Then we say
-							# the material was checked. We only need to
-							# check it once to know if it exists or not.
+							# If we don't have a material loaded,
+							# we can check if it exists and load it.
+							# Then we say the material was checked.
+							# We only need to check it once to know
+							# if it exists or not.
 							if FileAccess.file_exists(
 								n_mat_path
 							):
-								current_loaded_material = load(
+								curr_loaded_mat = load(
 									n_mat_path
 								)
-							current_material_checked = true
-						# We then check if we have a material loaded
-						# after that process.
-						if current_loaded_material:
-							st.set_material(current_loaded_material)
+							curr_mat_checked = true
+						# We then check if we have a material
+						# loaded after that process.
+						if curr_loaded_mat:
+							st.set_material(curr_loaded_mat)
 						
 						st.add_vertex(pairs_ind[0])
 			
@@ -564,14 +557,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				).rstrip(".")
 			)
 			
-			current_loaded_material = null
-			current_material_checked = false
+			curr_loaded_mat = null
+			curr_mat_checked = false
 	else:
-		var current_material_checked: bool = false
-		var current_loaded_material: StandardMaterial3D = null
+		var curr_mat_checked: bool = false
+		var curr_loaded_mat: StandardMaterial3D = null
 		
-		var current_lm_tex_checked: bool = false
-		var current_loaded_lm_tex: Texture2D = null
+		var curr_lm_tex_checked: bool = false
+		var curr_loaded_lm_tex: Texture2D = null
 		
 		var lm_index = 1
 		for lm in surf_dict:
@@ -602,8 +595,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					if (
 						not mat_path == "" 
-						and not current_material_checked 
-						and not current_loaded_material
+						and not curr_mat_checked 
+						and not curr_loaded_mat
 					):
 						# Fix up material path so it works.
 						var n_mat_path: String = mat_path
@@ -620,15 +613,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						if FileAccess.file_exists(
 							n_mat_path
 						):
-							current_loaded_material = load(
+							curr_loaded_mat = load(
 								n_mat_path
 							)
-						current_material_checked = true
+						curr_mat_checked = true
 					
 					if not lm == "none":
 						if (
-							not current_lm_tex_checked
-							and not current_loaded_lm_tex
+							not curr_lm_tex_checked
+							and not curr_loaded_lm_tex
 						):
 							# Fix up material path so it works.
 							var new_lm_tex_path: String = (
@@ -637,46 +630,46 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 								+ lm
 							)
 							
-							# If we don't have a lightmap texture loaded,
-							# we can check if it exists and load it.
-							# Then we say the texture was checked.
-							# We only need tocheck it once to know if
-							# it exists or not.
+							# If we don't have a lightmap texture
+							# loaded, we can check if it exists and
+							# load it. Then we say the texture was
+							# checked. We only need tocheck it once
+							# to know if it exists or not.
 							if FileAccess.file_exists(
 								new_lm_tex_path
 							):
-								current_loaded_lm_tex = load(
+								curr_loaded_lm_tex = load(
 									new_lm_tex_path
 								)
-							current_lm_tex_checked = true
+							curr_lm_tex_checked = true
 						
 						if (
-							current_loaded_lm_tex
-							and current_loaded_material
+							curr_loaded_lm_tex
+							and curr_loaded_mat
 						):
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
 								lm_mat.shader = LIGHTMAP_SHADER
 							
-							if current_loaded_material.albedo_texture:
+							if curr_loaded_mat.albedo_texture:
 								lm_mat.set_shader_parameter(
 									"texture_albedo",
-									current_loaded_material.albedo_texture
+									curr_loaded_mat.albedo_texture
 								)
 							
-							if current_loaded_material.normal_texture:
+							if curr_loaded_mat.normal_texture:
 								lm_mat.set_shader_parameter(
 									"texture_normal",
-									current_loaded_material.normal_texture
+									curr_loaded_mat.normal_texture
 								)
 								lm_mat.set_shader_parameter(
 									"normal_scale",
-									current_loaded_material.normal_scale
+									curr_loaded_mat.normal_scale
 								)
 							
 							lm_mat.set_shader_parameter(
 								"texture_lightmap",
-								current_loaded_lm_tex
+								curr_loaded_lm_tex
 							)
 							
 							lm_mat.set_shader_parameter(
@@ -688,8 +681,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							
 							st.set_material(lm_mat)
 						elif (
-							current_loaded_lm_tex
-							and not current_loaded_material
+							curr_loaded_lm_tex
+							and not curr_loaded_mat
 						):
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
@@ -697,7 +690,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							
 							lm_mat.set_shader_parameter(
 								"texture_lightmap",
-								current_loaded_lm_tex
+								curr_loaded_lm_tex
 							)
 							
 							lm_mat.set_shader_parameter(
@@ -708,12 +701,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							)
 							st.set_material(lm_mat)
 						elif (
-							current_loaded_material
-							and not current_loaded_lm_tex
+							curr_loaded_mat
+							and not curr_loaded_lm_tex
 						):
-							st.set_material(current_loaded_material)
-					elif current_loaded_material:
-						st.set_material(current_loaded_material)
+							st.set_material(curr_loaded_mat)
+					elif curr_loaded_mat:
+						st.set_material(curr_loaded_mat)
 					
 					st.add_vertex(pairs_ind[0])
 				
@@ -737,11 +730,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						).rstrip(".")
 					)
 				
-				current_loaded_lm_tex = null
-				current_lm_tex_checked = false
+				curr_loaded_lm_tex = null
+				curr_lm_tex_checked = false
 				
-				current_loaded_material = null
-				current_material_checked = false
+				curr_loaded_mat = null
+				curr_mat_checked = false
 			
 			if not lm == "none":
 				lm_index += 1
@@ -922,25 +915,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					# For each indice, give it it's
 					# corresponding vertex.
-					var curr_trb_vert_ind_pairs: Dictionary = {}
-					var curr_trb_pos_in_ind_arr: int = -1
-					for k in curr_trb_tri_indices.size() as int:
-						curr_trb_pos_in_ind_arr += 1
-						# If an indice already has vertex data
-						# associated with it, we know we can
-						# just skip it.
-						if not curr_trb_vert_ind_pairs.has(
-							curr_trb_tri_indices[k]
-						):
-							curr_trb_vert_ind_pairs[
-								curr_trb_tri_indices[k]
-							] = [
-								curr_trb_vertices[
-									curr_trb_pos_in_ind_arr
-								]
-							]
-						else:
-							curr_trb_pos_in_ind_arr -= 1
+					var curr_trb_vert_ind_pairs: Dictionary = (
+						helper_funcs.create_vert_ind_pairs(
+							curr_trb_vertices,
+							curr_trb_tri_indices
+						)
+					)
 					
 					# Every vertex should have only one indice
 					# associated with it.
@@ -1075,13 +1055,17 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						if not screens_folder_node:
 							screens_folder_node = Node3D.new()
 							screens_folder_node.name = "screens"
-							saved_scene_root.add_child(screens_folder_node)
+							saved_scene_root.add_child(
+								screens_folder_node
+							)
 							screens_folder_node.owner = saved_scene_root
 						
 						var screen_node: Node3D = Node3D.new()
 						screen_node.name = "screen"
 						screen_node.position = pos
-						screens_folder_node.add_child(screen_node, true)
+						screens_folder_node.add_child(
+							screen_node, true
+						)
 						screen_node.owner = saved_scene_root
 				"waypoint":
 					# Get waypoint position. Each X, Y and Z
@@ -1100,7 +1084,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							saved_scene_root.add_child(
 								waypoints_folder_node
 							)
-							waypoints_folder_node.owner = saved_scene_root
+							waypoints_folder_node.owner = (
+								saved_scene_root
+							)
 						
 						var waypoint_node: Node3D = Node3D.new()
 						waypoint_node.name = "waypoint"
@@ -1225,9 +1211,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							saved_scene_root.add_child(
 								spotlights_folder_node
 							)
-							spotlights_folder_node.owner = saved_scene_root
+							spotlights_folder_node.owner = (
+								saved_scene_root
+							)
 						
-						var spotlight_node: SpotLight3D = SpotLight3D.new()
+						var spotlight_node: SpotLight3D = (
+							SpotLight3D.new()
+						)
 						spotlight_node.name = "spotlight"
 						spotlight_node.position = pos
 						spotlight_node.rotation_degrees = rot_from_angles
@@ -1304,7 +1294,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							saved_scene_root.add_child(
 								pl_starts_folder_node
 							)
-							pl_starts_folder_node.owner = saved_scene_root
+							pl_starts_folder_node.owner = (
+								saved_scene_root
+							)
 						
 						var pl_start_node: Node3D = Node3D.new()
 						pl_start_node.name = "playerstart"
