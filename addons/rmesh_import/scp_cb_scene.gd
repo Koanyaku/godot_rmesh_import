@@ -75,6 +75,13 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 				{
 					"name": "lightmaps/light_multiplier",
 					"default_value": 1.0,
+					"property_hint": PROPERTY_HINT_RANGE,
+					"hint_string": "0,0,0.001,or_greater,hide_slider",
+				},
+				{
+					"name": "lightmaps/lightmap_path",
+					"default_value": "Current",
+					"property_hint": PROPERTY_HINT_DIR,
 				},
 				{
 					"name": "collision/generate_collision_mesh",
@@ -172,9 +179,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			+ "\", not \"RoomMesh\" or \"RoomMesh.HasTriggerBox\"."
 		)
 		return FAILED
+	
 	var scale_mesh: Vector3 = options.get(
 		"mesh/scale_mesh"
 	) as Vector3
+	
+	var include_lm: bool = options.get(
+		"lightmaps/include_lightmaps"
+	) as bool
 	
 	var saved_scene_root: Node3D = Node3D.new()
 	var saved_scene_root_name: String = (
@@ -194,10 +206,6 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# one of each texture used. Helpful when constructing the
 	# mesh later.
 	var used_tex: PackedStringArray = PackedStringArray()
-	
-	var include_lm: bool = options.get(
-		"lightmaps/include_lightmaps"
-	) as bool
 	
 	# Each texture has a set amount of faces associated with it.
 	# In the RMesh file, faces are just stored as a sequence of 
@@ -234,11 +242,21 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			)
 			return FAILED
 		
+		# Get the texture name.
 		var tex_name: String = file.get_pascal_string()
+		
+		# Add the lightmap name as a dictionary to the
+		# surface dictionary if it was not yet added.
 		if not surf_dict.has(lm_name):
 			surf_dict[lm_name] = {}
+		
+		# Add the texture name to the lightmap name dictionary
+		# as a dictionary if it was not yet added.
 		if not surf_dict.get(lm_name).has(tex_name):
 			surf_dict.get(lm_name)[tex_name] = {}
+		
+		# Add the texture name to the list of used textures
+		# if it was not yet added.
 		if not used_tex.has(tex_name):
 			used_tex.append(tex_name)
 		
@@ -276,7 +294,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var tex_v = vertex_data.decode_float(16)
 			var lm_u = vertex_data.decode_float(20)
 			var lm_v = vertex_data.decode_float(24)
+			
 			tex_uvs.append(Vector2(tex_u, tex_v))
+			# We don't care about lightmap UVs if we don't
+			# include lightmaps.
 			if include_lm:
 				lm_uvs.append(Vector2(lm_u, lm_v))
 			
@@ -295,19 +316,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if tri_indices.size() % tri_count:
-			push_error(
-				"SCP-CB Scene import - Triangle indice count"
-				+ " is not a multiple of the triangle count"
-				+ " (indice count: " + str(tri_indices.size())
-				+ ", triangle count: " + str(tri_count)
-				+ ", " + str(tri_indices.size()) + " mod "
-				+ str(tri_count) + " = "
-				+ str(tri_indices.size() % tri_count) + ")."
-			)
+		if not helper_funcs.check_tri_ind_count(
+			tri_indices,
+			tri_count
+		):
 			return FAILED
 		
-		# For each indice, give it it's corresponding vertex,
+		# For each indice, give it it's corresponding vertice,
 		# texture UV and lightmap UV.
 		var vert_ind_pairs: Dictionary = {}
 		if include_lm:
@@ -323,18 +338,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				[tex_uvs]
 			)
 		
-		# Every vertex should have only one indice
-		# associated with it.
-		if not vert_ind_pairs.size() == vertices.size():
-			push_error(
-				"SCP-CB Scene import - Vertice-indice pairs array"
-				+ " size doesn't match vertices array size."
-				+ " Every indice should have one set of vertices"
-				+ " assigned to it (vertice-indice pairs array"
-				+ " size: " + str(vert_ind_pairs.size())
-				+ ", vertices array size: " + str(vertices.size())
-				+ ")."
-			)
+		# Check if the vertice-indice pairs creation
+		# process succeeded.
+		if vert_ind_pairs.is_empty():
 			return FAILED
 		
 		surf_dict.get(lm_name).get(tex_name)[
@@ -346,6 +352,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	# Get the invisible collision face count.
 	var invis_coll_count: int = file.get_32()
+	
 	var include_invis_coll: bool = options.get(
 		"collision/include_invisible_collisions"
 	) as bool
@@ -409,32 +416,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				
 				# The triangle indice count must be a multiple
 				# of the triangle count.
-				if (
-					invis_coll_tri_indices.size()
-					% invis_coll_tri_count
+				if not helper_funcs.check_tri_ind_count(
+					invis_coll_tri_indices,
+					invis_coll_tri_count
 				):
-					push_error(
-						"SCP-CB Scene import -"
-						+ " Invisible collision triangle indice"
-						+ " count is not a multiple of the"
-						+ " invisible collision triangle count"
-						+ " (indice count is "
-						+ str(invis_coll_tri_indices.size())
-						+ ", triangle count is " 
-						+ str(invis_coll_tri_count) + ", " 
-						+ str(invis_coll_tri_indices.size())
-						+ " mod "
-						+ str(invis_coll_tri_count) + " = "
-						+ str(
-							invis_coll_tri_indices.size()
-							% invis_coll_tri_count
-						)
-						+ ")."
-					)
 					return FAILED
 				
-				# For each invisible collision indice, give it it's
-				# corresponding vertex.
+				# For each invisible collision indice, give it
+				# it's corresponding vertice.
 				var invis_coll_vert_ind_pairs: Dictionary = (
 					helper_funcs.create_vert_ind_pairs(
 						invis_coll_vertices,
@@ -442,25 +431,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					)
 				)
 				
-				# Every invisible collision vertex should have only
-				# one indice associated with it.
-				if not (
-					invis_coll_vert_ind_pairs.size() 
-					== invis_coll_vertices.size()
-				):
-					push_error(
-						"SCP-CB Scene import - Invisible collision"
-						+ " vertice-indice pairs array size"
-						+ " doesn't match invisible collision"
-						+ " vertices array size. Every indice"
-						+ " should have one set of vertices"
-						+ " assigned to it."
-						+ " (vertice-indice pairs array size: "
-						+ str(invis_coll_vert_ind_pairs.size())
-						+ ", vertices array size: "
-						+ str(invis_coll_vertices.size())
-						+ ")"
-					)
+				# Check if the vertice-indice pairs creation
+				# process succeeded.
+				if invis_coll_vert_ind_pairs.is_empty():
 					return FAILED
 				
 				invis_coll_arr.append(
@@ -942,32 +915,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					# The triangle indice count must be a
 					# multiple of the triangle count.
-					if (
-						curr_trb_tri_indices.size()
-						% curr_trb_tri_count
+					if not helper_funcs.check_tri_ind_count(
+						curr_trb_tri_indices,
+						curr_trb_tri_count
 					):
-						push_error(
-							"SCP-CB Scene import -"
-							+ " Trigger box triangle indice count"
-							+ " is not a multiple of the trigger"
-							+ " box triangle count"
-							+ " (indice count is " 
-							+ str(curr_trb_tri_indices.size())
-							+ ", triangle count is " 
-							+ str(curr_trb_tri_count) + ", " 
-							+ str(curr_trb_tri_indices.size())
-							+ " mod "
-							+ str(curr_trb_tri_count) + " = "
-							+ str(
-								curr_trb_tri_indices.size()
-								% curr_trb_tri_count
-							)
-							+ ")."
-						)
 						return FAILED
 					
 					# For each indice, give it it's
-					# corresponding vertex.
+					# corresponding vertice.
 					var curr_trb_vert_ind_pairs: Dictionary = (
 						helper_funcs.create_vert_ind_pairs(
 							curr_trb_vertices,
@@ -975,25 +930,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 					)
 					
-					# Every vertex should have only one indice
-					# associated with it.
-					if not (
-						curr_trb_vert_ind_pairs.size()
-						== curr_trb_vertices.size()
-					):
-						push_error(
-							"SCP-CB Scene import - Trigger box"
-							+ " vertice-indice pairs array size"
-							+ " doesn't match trigger box"
-							+ " vertices array size. Every indice"
-							+ " should have one set of"
-							+ " vertices assigned to it."
-							+ " (vertice-indice pairs array size: "
-							+ str(curr_trb_vert_ind_pairs.size())
-							+ ", vertices array size: "
-							+ str(curr_trb_vertices.size())
-							+ ")"
-						)
+					# Check if the vertice-indice pairs creation
+					# process succeeded.
+					if curr_trb_vert_ind_pairs.is_empty():
 						return FAILED
 					
 					var curr_trb_name: String = file.get_pascal_string()
@@ -1026,9 +965,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			for i in trb_count as int:
 				var curr_trb_surf_count: int = file.get_32()
 				for j in curr_trb_surf_count as int:
+					# Skip through all the vertices.
 					var curr_trb_vert_count: int = file.get_32()
 					for k in curr_trb_vert_count * 3:
 						file.get_32()
+					# Skip through all the indices.
 					var curr_trb_tri_count: int = file.get_32()
 					for k in curr_trb_tri_count * 3:
 						file.get_32()
@@ -1266,7 +1207,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					# Get sound index. 4-byte int.
 					var snd_ind: int = file.get_32()
 					
-					# Get soundemitter range. 4-byte float.
+					# Get sound emitter range. 4-byte float.
 					var range: float = file.get_float()
 					
 					if include_snd_em:
@@ -1370,6 +1311,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	var saved_scene = PackedScene.new()
 	saved_scene.pack(saved_scene_root)
+	
 	return ResourceSaver.save(
 		saved_scene, 
 		"%s.%s" % [save_path, _get_save_extension()]

@@ -8,27 +8,83 @@ extends Node
 func create_vert_ind_pairs(vertices: PackedVector3Array, indices: PackedInt32Array, data: Array = []) -> Dictionary:
 	var pairs: Dictionary = {}
 	
-	var pos_in_arr: int = -1
+	# This value is the position from which we will read vertice
+	# and other data from their respective arrays.
+	var correct_arr_pos: int = -1
+	
 	for i in indices.size():
-		pos_in_arr += 1
-		# If an indice already has vertex data associated
-		# with it, we know we can just skip it.
+		correct_arr_pos += 1
+		
+		# If an indice already has vertice data associated
+		# with it in the pairs, we know we can just skip it.
 		if not pairs.has(indices[i]):
 			pairs[indices[i]] = [] as Array
 			Array(pairs[indices[i]]).append(
-				vertices[pos_in_arr]
+				vertices[correct_arr_pos]
 			)
 			
 			if not data.is_empty():
 				for j in data:
 					Array(pairs[indices[i]]).append(
-						j[pos_in_arr]
+						j[correct_arr_pos]
 					)
 		else:
-			pos_in_arr -= 1
+			# If the pairs already contain this indice,
+			# we have to set back the correct array position
+			# by one, basically making it so that it was
+			# never increased. 
+			
+			# This is because, while the vertice array contains
+			# each vertice only once, the indice array can contain
+			# the same indice more than once. We, however, don't
+			# care about these duplicate indices, since we already
+			# have data with that particular indice stored in the
+			# pairs.
+			
+			# Basically, we halt the correct position from
+			# increasing until we encounter a new indice, 
+			# otherwise, this value would keep increasing
+			# with each indice in the indice array, and we
+			# would read from the incorrect position in the
+			# vertice array.
+			
+			# At the end of the creation process, the correct
+			# array position + 1 should be the vertice array size.
+			correct_arr_pos -= 1
+	
+	# Every invisible collision vertice should 
+	# have only one indice associated with it.
+	if not pairs.size() == vertices.size():
+		push_error(
+			"Vertice-indice pairs array size doesn't match"
+			+ " vertices array size. Every indice should have"
+			+ " one set of vertices assigned to it"
+			+ " (vertice-indice pairs array size: "
+			+ str(pairs.size()) + ", vertices array size: "
+			+ str(vertices.size()) + ")"
+		)
+		return {}
 	
 	return pairs
 
+
+func check_tri_ind_count(indices: PackedInt32Array, tri_count: int) -> bool:
+	var ind_size: int = indices.size()
+	
+	# The triangle indice count must be a
+	# multiple of the triangle count.
+	if (ind_size % tri_count):
+		push_error(
+			"Triangle indice count is not a multiple of the"
+			+ " triangle count (indice count is "
+			+ str(ind_size) + ", triangle count is "
+			+ str(tri_count) + ", " + str(ind_size)
+			+ " mod " + str(tri_count) + " = "
+			+ str(ind_size % tri_count) + ")."
+		)
+		return false
+	
+	return true
 
 func get_entity_position(file: FileAccess, scale: Vector3) -> Vector3:
 	# Each X, Y and Z position is a 4-byte float.
