@@ -1,5 +1,5 @@
 
-## Importing CBRE-EX .rmesh files.
+## Importing CBRE-EX RMesh files.
 
 ### Contents:
 
@@ -9,11 +9,11 @@
 
 ## 1. Preface
 
-In this guide, I will show you how to import .rmesh files exported with CBRE-EX, and all the different import options you can utilize.
+In this guide, I will show you how to import RMesh files exported with CBRE-EX, and all the different import options you can utilize.
 
 > ⚠️ **This addon has only been tested with files exported with CBRE-EX v2.1.0. I don't know how or if it works for files from other versions.**
 
-When Godot detects the .rmesh file, it will try to automatically import it, but it will usually import it with an incorrect importer. What you are interested in when importing CBRE-EX files is "**CBRE-EX RMesh as Mesh**" and "**CBRE-EX RMesh as PackedScene**".
+When Godot detects the RMesh file, it will try to automatically import it, but it will usually import it with an incorrect importer. What you are interested in when importing CBRE-EX files is "**CBRE-EX RMesh as Mesh**" and "**CBRE-EX RMesh as PackedScene**".
 
 ## 2. Importing as Mesh
 
@@ -22,6 +22,7 @@ We'll start with importing the file as a [Mesh](https://docs.godotengine.org/en/
 When you select "**CBRE-EX RMesh as Mesh**" in the import tab, you will see these categories:
 
 - Mesh
+- Lightmaps
 - Materials
 
 ---
@@ -30,9 +31,7 @@ When you select "**CBRE-EX RMesh as Mesh**" in the import tab, you will see thes
 
     - Scale Mesh
     
-        - A [Vector3](https://docs.godotengine.org/en/stable/classes/class_vector3.html) value representing the scale multiplier of the imported mesh. You usually don't want this to be the default value (1, 1, 1), but lower, as the mesh will be scaled up drastically, since sizes work different in CBRE-EX and in Godot.<br><br>
-        
-        > ⚠️ **While the values are ratio-locked by default, it is possible to set unusual scale values. However, this is not recommended.**
+        - A [Vector3](https://docs.godotengine.org/en/stable/classes/class_vector3.html) value representing the scale multiplier of the imported mesh. You usually don't want this to be the default value (1, 1, 1), but lower, as the mesh will be scaled up drastically, since sizes work different in CBRE-EX and in Godot.
         
     - Include Invisible Collisions
     
@@ -42,7 +41,23 @@ When you select "**CBRE-EX RMesh as Mesh**" in the import tab, you will see thes
 
 ---
 
-2. **Materials category:**
+2. **Lightmaps category:**
+
+    - Include Lightmaps
+    
+        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, lightmaps will be applied to the mesh.
+    
+    - Light Multiplier
+    
+        - A [float](https://docs.godotengine.org/en/stable/classes/class_float.html) value representing the light brightness multiplier for the imported lightmaps.
+    
+    - Lightmap Path
+    
+        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's lightmap textures are located. If left empty, the importer will attempt to find the textures in the RMesh file's directory. 
+
+---
+
+3. **Materials category:**
 
     - Material Path
     
@@ -55,6 +70,7 @@ Importing the RMesh as a [PackedScene](https://docs.godotengine.org/en/stable/cl
 When you select "**CBRE-EX RMesh as PackedScene**" in the import tab, you will see these categories:
 
 - Mesh
+- Lightmaps
 - Collision
 - Materials
 - Entities
@@ -69,7 +85,23 @@ When you select "**CBRE-EX RMesh as PackedScene**" in the import tab, you will s
 
 ---
 
-2. **Collision category:**
+2. **Lightmaps category:**
+
+    - Include Lightmaps
+    
+        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, lightmaps will be applied to the mesh.
+    
+    - Light Multiplier
+    
+        - A [float](https://docs.godotengine.org/en/stable/classes/class_float.html) value representing the light brightness multiplier for the imported lightmaps.
+    
+    - Lightmap Path
+    
+        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's lightmap textures are located. If left empty, the importer will attempt to find the textures in the RMesh file's directory. 
+
+---
+
+3. **Collision category:**
 
     - Generate Collision Mesh
     
@@ -77,13 +109,13 @@ When you select "**CBRE-EX RMesh as PackedScene**" in the import tab, you will s
     
     - Include Invisible Collisions
     
-        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. Some RMesh files have collisions that are invisible. If this value is _true_, and "**Generate Collision Mesh**" is also _true_, they will be included in the imported mesh.<br><br>
+        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. Some RMesh files have collisions that are invisible. If this value is _true_, they will be included in the imported mesh.<br><br>
         
         > ⚠️ **This setting ignores the 'Split Collision Mesh' setting and always generates a separate [StaticBody3D](https://docs.godotengine.org/en/stable/classes/class_staticbody3d.html) for the invisible collisions.**
     
     - Split Collision Mesh
     
-        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If this value is _true_, and "**Generate Collision Mesh**" is also _true_, the mesh's collision will be split up by the mesh's surfaces. For example, if you have 8 surfaces, this option will generate 8 collision shapes.
+        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If this value is _true_, the mesh's collision will be split up by the mesh's surfaces. For example, if you have 8 surfaces, this option will generate 8 collision shapes.
 
 ---
 
@@ -99,7 +131,7 @@ When you select "**CBRE-EX RMesh as PackedScene**" in the import tab, you will s
 
     - Include entities
     
-        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, entites included in the RMesh file get imported. Each entity type will get put into it's special "folder" [Node](https://docs.godotengine.org/en/stable/classes/class_node.html).
+        - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, entites included in the RMesh file get imported. Each entity type will get put into it's special "folder" [Node3D](https://docs.godotengine.org/en/stable/classes/class_node3d.html).
         
             > ⚠️ **While CBRE-EX supports exporting custom entities, importing custom entities is currently not supported. Unexpected things _will_ happen when trying to import an RMesh file with custom entities, as the importer doesn't know what to do with them.**
         
@@ -111,7 +143,7 @@ When you select "**CBRE-EX RMesh as PackedScene**" in the import tab, you will s
             
                 - A [boolean](https://docs.godotengine.org/en/stable/classes/class_bool.html) value. If _true_, lights get imported as [OmniLight3D](https://docs.godotengine.org/en/stable/classes/class_omnilight3d.html)s (classname "light" or "spotlight" in the RMesh file).<br><br>
                 
-                > ⚠️ **CBRE-EX doesn't distinguish between normal lights and spotlights when exporting. All imported lights will always be OmniLight3Ds, never SpotLight3Ds. Also, lighting will always look different with imported lights than how it looks in CBRE-EX. The lights receive values from the RMesh file, but you will have to tweak them more if you want to get them to look the same (or almost the same) as in CBRE-EX.**
+                > ⚠️ **CBRE-EX doesn't distinguish between normal lights and spotlights when exporting. All imported lights will always be OmniLight3Ds, never SpotLight3Ds.**
             
             - Light Range Scale
             
