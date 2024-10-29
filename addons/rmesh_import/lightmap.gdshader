@@ -22,12 +22,12 @@ void fragment() {
 	// lookup the colors at the uv location of our textures
 	vec4 albedo_tex = texture(texture_albedo, UV);
 	vec4 lightmap_tex = texture(texture_lightmap, UV2);
-	
+
 	// the overall albedo (color) will be the material texture TIMES the lightmap
 	// (so it can be darkened).
 	// you can optionally use a multiplier to allow lightening areas
 	ALBEDO = albedo_tex.rgb * lightmap_tex.rgb * light_multiplier;
-	
+
 	NORMAL_MAP = texture(texture_normal, UV).rgb;
 	NORMAL_MAP_DEPTH = normal_scale;
 }

@@ -392,6 +392,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		"lightmaps/lightmap_path"
 	) as String
 	
+	# Mesh construction.
 	if not include_lm:
 		# If we don't include lightmaps.
 		

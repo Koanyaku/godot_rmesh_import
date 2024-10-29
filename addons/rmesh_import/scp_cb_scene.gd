@@ -447,9 +447,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			# ignore them, we still have to move forward in the file
 			# so that we don't read the wrong data afterwards.
 			for i in invis_coll_count:
+				# Skip through all the vertices.
 				var invis_coll_vert_count: int = file.get_32()
 				for j in invis_coll_vert_count * 3:
 					file.get_32()
+				# Skip through all the indices.
 				var invis_coll_tri_count: int = file.get_32()
 				for j in invis_coll_tri_count * 3:
 					file.get_32()
@@ -466,6 +468,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		"lightmaps/lightmap_path"
 	) as String
 	
+	# Mesh construction.
 	if not include_lm:
 		# If we don't include lightmaps.
 		
@@ -1118,13 +1121,6 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						waypoint_node.owner = saved_scene_root
 				"light":
-					# NOTICE: Lighting will always look different
-					# with imported lights than how it looks
-					# in SCP-CB. The lights receive values from
-					# the file, but you will have to tweak them
-					# more if you want to get them to look the same
-					# (or almost the same) as in SCP-CB.
-					
 					# Get light position.
 					var pos: Vector3 = helper_funcs.get_entity_position(
 						file, scale_mesh
@@ -1167,13 +1163,6 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						light_node.owner = saved_scene_root
 				"spotlight":
-					# NOTICE: Lighting will always look different
-					# with imported spotlights than how it looks
-					# in SCP-CB. The spotlights receive values from
-					# the file, but you will have to tweak them
-					# more if you want to get them to look the same
-					# (or almost the same) as in SCP-CB.
-					
 					# Get spotlight position.
 					var pos: Vector3 = helper_funcs.get_entity_position(
 						file, scale_mesh
