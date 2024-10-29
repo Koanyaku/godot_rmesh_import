@@ -1349,6 +1349,6 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	saved_scene.pack(saved_scene_root)
 	
 	return ResourceSaver.save(
-		saved_scene, 
+		saved_scene,
 		"%s.%s" % [save_path, _get_save_extension()]
 	)
