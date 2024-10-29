@@ -80,7 +80,7 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 				},
 				{
 					"name": "lightmaps/lightmap_path",
-					"default_value": "Current",
+					"default_value": "",
 					"property_hint": PROPERTY_HINT_DIR,
 				},
 				{
@@ -462,7 +462,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		"materials/material_path"
 	) as String
 	
+	var lm_path: String = options.get(
+		"lightmaps/lightmap_path"
+	) as String
+	
 	if not include_lm:
+		# If we don't include lightmaps.
+		
 		var curr_mat_checked: bool = false
 		var curr_loaded_mat: Material = null
 		
@@ -538,6 +544,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			curr_loaded_mat = null
 			curr_mat_checked = false
 	else:
+		# If we include lightmaps.
+		
 		var curr_mat_checked: bool = false
 		var curr_loaded_mat: StandardMaterial3D = null
 		
@@ -601,17 +609,27 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							not curr_lm_tex_checked
 							and not curr_loaded_lm_tex
 						):
-							# Fix up material path so it works.
-							var new_lm_tex_path: String = (
-								source_file.get_base_dir()
-								+ "/"
-								+ lm
-							)
+							# Fix up lightmap texture path
+							# so it works. If a lightmap
+							# path is set, the texture files
+							# will be read from there, otherwise,
+							# they will be read from the RMesh
+							# file's directory.
+							var new_lm_tex_path: String = ""
+							if lm_path == "":
+								new_lm_tex_path = (
+									source_file.get_base_dir()
+									+ "/" + lm
+								)
+							else:
+								new_lm_tex_path = (
+									lm_path + "/" + lm
+								)
 							
 							# If we don't have a lightmap texture
 							# loaded, we can check if it exists and
 							# load it. Then we say the texture was
-							# checked. We only need tocheck it once
+							# checked. We only need to check it once
 							# to know if it exists or not.
 							if FileAccess.file_exists(
 								new_lm_tex_path
@@ -625,6 +643,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							curr_loaded_lm_tex
 							and curr_loaded_mat
 						):
+							# If the surface has a lightmap
+							# associated with it and we loaded
+							# both the lightmap and the normal
+							# texture, we give it the lightmap
+							# material with both textures applied.
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
 								lm_mat.shader = LIGHTMAP_SHADER
@@ -662,6 +685,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							curr_loaded_lm_tex
 							and not curr_loaded_mat
 						):
+							# If the surface has a lightmap
+							# associated with it and we loaded
+							# it, but we couldn't load the normal
+							# texture, we give it the lightmap
+							# material but only with the lightmap
+							# texture applied.
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
 								lm_mat.shader = LIGHTMAP_SHADER
@@ -682,8 +711,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							curr_loaded_mat
 							and not curr_loaded_lm_tex
 						):
+							# If the surface has a lightmap
+							# associated with it, but we can't
+							# load it, we give it the normal
+							# material, if we have one.
 							st.set_material(curr_loaded_mat)
 					elif curr_loaded_mat:
+						# If the surface doesn't have a
+						# lightmap associated with it, we give
+						# it the normal material, if we have one.
 						st.set_material(curr_loaded_mat)
 					
 					st.add_vertex(pairs_ind[0])
