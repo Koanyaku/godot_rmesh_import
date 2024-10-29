@@ -7,20 +7,20 @@
 
 Have you ever played [SCP – Containment Breach](https://scpcbgame.com/)? Have you ever thought _"Hmm... I want to get these rooms into Godot, but they're in this weird .rmesh file format."_? If so, then this addon is just the thing you need!
 
-This addon allows you to import this ancient file format officially supported by only one game into the Godot Engine. It supports .rmesh files from the original SCP – Containment Breach game, and also files from [CBRE-EX](https://github.com/AnalogFeelings/cbre-ex), a free third-party map editor for the game.
+This addon allows you to import this ancient file format officially supported by only one game into the Godot Engine. It supports RMesh files from the original SCP – Containment Breach game, and also files from [CBRE-EX](https://github.com/AnalogFeelings/cbre-ex), a free third-party map editor for the game.
 
 ### Some features:
 
 - Importing rooms as either Godot's [Mesh](https://docs.godotengine.org/en/stable/classes/class_mesh.html) resource or [PackedScene](https://docs.godotengine.org/en/stable/classes/class_packedscene.html) resource.
 - Automatic collision generation.
 - Automatic material application.
+- Automatic lightmap application.
 - Entity importing.
-- Lightmaps aren't supported. Instead, you can import light entities.<br><br>
 
 I highly suggest checking out these links, as you will find all information about the features there!
 
-- [Importing SCP – Containment Breach .rmesh files](docs/importing_scp-cb_files.md)
-- [Importing CBRE-EX .rmesh files](docs/importing_cbre-ex_files.md)<br><br>
+- [Importing SCP – Containment Breach RMesh files](docs/importing_scp-cb_files.md)
+- [Importing CBRE-EX RMesh files](docs/importing_cbre-ex_files.md)<br><br>
 
 Some extra stuff...
 

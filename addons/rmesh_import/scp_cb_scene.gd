@@ -4,6 +4,14 @@ extends EditorImportPlugin
 
 enum PRESETS { DEFAULT }
 
+const LIGHTMAP_SHADER: Shader = preload(
+	"res://addons/rmesh_import/lightmap.gdshader"
+)
+
+var helper_funcs = preload(
+	"res://addons/rmesh_import/helper_funcs.gd"
+).new()
+
 
 # Fix crash when importing multiple files with threads.
 # Hopefully this will be resolved in Godot 4.4.
@@ -59,6 +67,21 @@ func _get_import_options(path, preset_index) -> Array[Dictionary]:
 					"name": "mesh/scale_mesh",
 					"default_value": Vector3(1,1,1),
 					"property_hint": PROPERTY_HINT_LINK,
+				},
+				{
+					"name": "lightmaps/include_lightmaps",
+					"default_value": false,
+				},
+				{
+					"name": "lightmaps/light_multiplier",
+					"default_value": 1.0,
+					"property_hint": PROPERTY_HINT_RANGE,
+					"hint_string": "0,0,0.001,or_greater,hide_slider",
+				},
+				{
+					"name": "lightmaps/lightmap_path",
+					"default_value": "",
+					"property_hint": PROPERTY_HINT_DIR,
 				},
 				{
 					"name": "collision/generate_collision_mesh",
@@ -145,7 +168,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	# Get the header. It should either be "RoomMesh" 
 	# or "RoomMesh.HasTriggerBox".
-	var header: String = read_b3d_string(file)
+	var header: String = file.get_pascal_string()
 	if (
 		not header == "RoomMesh" 
 		and not header == "RoomMesh.HasTriggerBox"
@@ -156,9 +179,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			+ "\", not \"RoomMesh\" or \"RoomMesh.HasTriggerBox\"."
 		)
 		return FAILED
+	
 	var scale_mesh: Vector3 = options.get(
 		"mesh/scale_mesh"
 	) as Vector3
+	
+	var include_lm: bool = options.get(
+		"lightmaps/include_lightmaps"
+	) as bool
 	
 	var saved_scene_root: Node3D = Node3D.new()
 	var saved_scene_root_name: String = (
@@ -170,12 +198,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# Get the texture count.
 	var tex_count: int = file.get_32()
 	
-	# We accumulate all the data for all the textures in this 
-	# texture dictionary. Each texture will store an array of 
-	# dictionaries, where each dictionary will store a specific
-	# set of indices, where each indice stores an array of values
-	# for that indice.
-	var tex_dict: Dictionary = {}
+	# We accumulate all the data about the surfaces into this
+	# surface dictionary.
+	var surf_dict: Dictionary = {}
+	
+	# Array of all the textures used in the file. There's only
+	# one of each texture used. Helpful when constructing the
+	# mesh later.
+	var used_tex: PackedStringArray = PackedStringArray()
 	
 	# Each texture has a set amount of faces associated with it.
 	# In the RMesh file, faces are just stored as a sequence of 
@@ -195,10 +225,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		lm_flag = file.get_8()
 		var lm_name: String = ""
 		if lm_flag == 2:
-			lm_name = read_b3d_string(file)
+			lm_name = file.get_pascal_string()
 		else:
 			# If a lightmap doesn't exist for this texture,
 			# there's a 4-byte padding after the flag.
+			lm_name = "none"
 			file.get_32()
 		
 		var tex_flag = file.get_8()
@@ -211,15 +242,28 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			)
 			return FAILED
 		
-		var tex_name: String = read_b3d_string(file)
-		if not tex_dict.has(tex_name):
-			tex_dict[tex_name] = [] as Array[Dictionary]
+		# Get the texture name.
+		var tex_name: String = file.get_pascal_string()
+		
+		# Add the lightmap name as a dictionary to the
+		# surface dictionary if it was not yet added.
+		if not surf_dict.has(lm_name):
+			surf_dict[lm_name] = {}
+		
+		# Add the texture name to the lightmap name dictionary
+		# as a dictionary if it was not yet added.
+		if not surf_dict.get(lm_name).has(tex_name):
+			surf_dict.get(lm_name)[tex_name] = {}
+		
+		# Add the texture name to the list of used textures
+		# if it was not yet added.
+		if not used_tex.has(tex_name):
+			used_tex.append(tex_name)
 		
 		# Get the vertex count.
 		var vertex_count: int = file.get_32()
 		
 		# Initialize arrays for texture and lightmap UVs.
-		# NOTE: Lightmap UVs are not used.
 		var tex_uvs: PackedVector2Array = PackedVector2Array()
 		var lm_uvs: PackedVector2Array = PackedVector2Array()
 		
@@ -250,8 +294,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			var tex_v = vertex_data.decode_float(16)
 			var lm_u = vertex_data.decode_float(20)
 			var lm_v = vertex_data.decode_float(24)
+			
 			tex_uvs.append(Vector2(tex_u, tex_v))
-			lm_uvs.append(Vector2(lm_u, lm_v))
+			# We don't care about lightmap UVs if we don't
+			# include lightmaps.
+			if include_lm:
+				lm_uvs.append(Vector2(lm_u, lm_v))
 			
 			# The data for each vertex ends with three
 			# 'RGB' bytes. Usually, they are just three FF bytes.
@@ -268,61 +316,47 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if tri_indices.size() % tri_count:
-			push_error(
-				"SCP-CB Scene import - Triangle indice count"
-				+ " is not a multiple of the triangle count"
-				+ " (indice count: " + str(tri_indices.size())
-				+ ", triangle count: " + str(tri_count)
-				+ ", " + str(tri_indices.size()) + " mod "
-				+ str(tri_count) + " = "
-				+ str(tri_indices.size() % tri_count) + ")."
-			)
+		if not helper_funcs.check_tri_ind_count(
+			tri_indices,
+			tri_count
+		):
 			return FAILED
 		
-		# For each indice, give it it's corresponding vertex,
+		# For each indice, give it it's corresponding vertice,
 		# texture UV and lightmap UV.
 		var vert_ind_pairs: Dictionary = {}
-		var pos_in_ind_arr: int = -1
-		for j in tri_indices.size() as int:
-			pos_in_ind_arr += 1
-			# If an indice already has vertex data associated 
-			# with it, we know we can just skip it.
-			if not vert_ind_pairs.has(tri_indices[j]):
-				vert_ind_pairs[tri_indices[j]] = [
-					vertices[pos_in_ind_arr],
-					tex_uvs[pos_in_ind_arr],
-					lm_uvs[pos_in_ind_arr]
-				]
-			else:
-				pos_in_ind_arr -= 1
-		
-		# Every vertex should have only one indice
-		# associated with it.
-		if not vert_ind_pairs.size() == vertices.size():
-			push_error(
-				"SCP-CB Scene import - Vertice-indice pairs array size"
-				+ " doesn't match vertices array size. Every indice"
-				+ " should have one set of vertices assigned to it"
-				+ " (vertice-indice pairs array size: " 
-				+ str(vert_ind_pairs.size()) 
-				+ ", vertices array size: " + str(vertices.size())
-				+ ")."
+		if include_lm:
+			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+				vertices,
+				tri_indices,
+				[tex_uvs, lm_uvs]
 			)
+		else:
+			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+				vertices,
+				tri_indices,
+				[tex_uvs]
+			)
+		
+		# Check if the vertice-indice pairs creation
+		# process succeeded.
+		if vert_ind_pairs.is_empty():
 			return FAILED
 		
-		Array(tex_dict.get(tex_name)).append(
-			{
-				"indices": tri_indices,
-				"pairs": vert_ind_pairs
-			}
-		)
+		surf_dict.get(lm_name).get(tex_name)[
+			"indices"
+		] = tri_indices
+		surf_dict.get(lm_name).get(tex_name)[
+			"pairs"
+		] = vert_ind_pairs
 	
 	# Get the invisible collision face count.
 	var invis_coll_count: int = file.get_32()
+	
 	var include_invis_coll: bool = options.get(
 		"collision/include_invisible_collisions"
 	) as bool
+	
 	var generate_coll: bool = options.get(
 		"collision/generate_collision_mesh"
 	) as bool
@@ -338,20 +372,29 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				var invis_coll_vert_count: int = file.get_32()
 				
 				# Get the invisible collision vertices.
-				var invis_coll_vertices: PackedVector3Array = PackedVector3Array()
+				var invis_coll_vertices: PackedVector3Array = (
+					PackedVector3Array()
+				)
 				for j in invis_coll_vert_count:
-					# The actual data for each invisible collision vertex
-					# takes up 12 bytes. Only the X, Y and Z positions get
-					# saved with invisible collision vertices. Other than
-					# that, we do mostly the same things as with normal
-					# face vertices.
+					# The actual data for each invisible 
+					# collision vertex takes up 12 bytes. 
+					# Only the X, Y and Z positions get saved
+					# with invisible collision vertices.
+					# Other than that, we do mostly the same
+					# things as with normal face vertices.
 					var invis_coll_vertex_data: PackedByteArray = (
 						file.get_buffer(12)
 					)
 					
-					var pos_x: float = invis_coll_vertex_data.decode_float(0)
-					var pos_y: float = invis_coll_vertex_data.decode_float(4)
-					var pos_z: float = invis_coll_vertex_data.decode_float(8)
+					var pos_x: float = (
+						invis_coll_vertex_data.decode_float(0)
+					)
+					var pos_y: float = (
+						invis_coll_vertex_data.decode_float(4)
+					)
+					var pos_z: float = (
+						invis_coll_vertex_data.decode_float(8)
+					)
 					invis_coll_vertices.append(
 						Vector3(pos_x, pos_y, -pos_z)
 						* scale_mesh
@@ -364,68 +407,33 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				var invis_coll_tri_count: int = file.get_32()
 				
 				# Get the invisible collision triangle indices.
-				var invis_coll_tri_indices: PackedInt32Array = PackedInt32Array()
+				var invis_coll_tri_indices: PackedInt32Array = (
+					PackedInt32Array()
+				)
 				for j in invis_coll_tri_count * 3:
 					# Each indice is stored as 4 bytes.
 					invis_coll_tri_indices.append(file.get_32())
 				
 				# The triangle indice count must be a multiple
 				# of the triangle count.
-				if invis_coll_tri_indices.size() % invis_coll_tri_count:
-					push_error(
-						"SCP-CB Scene import -"
-						+ " Invisible collision triangle indice count"
-						+ " is not a multiple of the invisible"
-						+ " collision triangle count"
-						+ " (indice count is " 
-						+ str(invis_coll_tri_indices.size())
-						+ ", triangle count is " 
-						+ str(invis_coll_tri_count) + ", " 
-						+ str(invis_coll_tri_indices.size()) + " mod "
-						+ str(invis_coll_tri_count) + " = "
-						+ str(
-							invis_coll_tri_indices.size()
-							% invis_coll_tri_count
-						)
-						+ ")."
-					)
+				if not helper_funcs.check_tri_ind_count(
+					invis_coll_tri_indices,
+					invis_coll_tri_count
+				):
 					return FAILED
 				
-				# For each invisible collision indice, give it it's
-				# corresponding vertex.
-				var invis_coll_vert_ind_pairs: Dictionary = {}
-				var pos_in_invis_coll_ind_arr: int = -1
-				for j in invis_coll_tri_indices.size():
-					pos_in_invis_coll_ind_arr += 1
-					# If an indice already has vertex data associated
-					# with it, we know we can just skip it.
-					if not invis_coll_vert_ind_pairs.has(
-						invis_coll_tri_indices[j]
-					):
-						invis_coll_vert_ind_pairs[
-							invis_coll_tri_indices[j]
-						] = invis_coll_vertices[pos_in_invis_coll_ind_arr]
-					else:
-						pos_in_invis_coll_ind_arr -= 1
-				
-				# Every invisible collision vertex should have only
-				# one indice associated with it.
-				if not (
-					invis_coll_vert_ind_pairs.size() 
-					== invis_coll_vertices.size()
-				):
-					push_error(
-						"SCP-CB Scene import - Invisible collision"
-						+ " vertice-indice pairs array size"
-						+ " doesn't match invisible collision"
-						+ " vertices array size. Every indice"
-						+ " should have one set of vertices assigned to it."
-						+ " (vertice-indice pairs array size: " 
-						+ str(invis_coll_vert_ind_pairs.size()) 
-						+ ", vertices array size: "
-						+ str(invis_coll_vertices.size())
-						+ ")"
+				# For each invisible collision indice, give it
+				# it's corresponding vertice.
+				var invis_coll_vert_ind_pairs: Dictionary = (
+					helper_funcs.create_vert_ind_pairs(
+						invis_coll_vertices,
+						invis_coll_tri_indices
 					)
+				)
+				
+				# Check if the vertice-indice pairs creation
+				# process succeeded.
+				if invis_coll_vert_ind_pairs.is_empty():
 					return FAILED
 				
 				invis_coll_arr.append(
@@ -439,9 +447,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			# ignore them, we still have to move forward in the file
 			# so that we don't read the wrong data afterwards.
 			for i in invis_coll_count:
+				# Skip through all the vertices.
 				var invis_coll_vert_count: int = file.get_32()
 				for j in invis_coll_vert_count * 3:
 					file.get_32()
+				# Skip through all the indices.
 				var invis_coll_tri_count: int = file.get_32()
 				for j in invis_coll_tri_count * 3:
 					file.get_32()
@@ -453,76 +463,302 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	var mat_path: String = options.get(
 		"materials/material_path"
 	) as String
-	var current_material_checked: bool = false
-	var current_loaded_material: Material = null
 	
-	# For each texture in the texture dictionary.
-	for i in tex_dict.keys() as Array[Dictionary]:
-		var tex_name: String = tex_dict.find_key(tex_dict.get(i)) as String
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		# For each dictionary stored with the texture.
-		for j in Array(tex_dict.get(i)) as Array[Dictionary]:
-			# For each indice in the indices array.
-			var pairs: Dictionary = j.get("pairs") as Dictionary
-			for k in j.get("indices") as Array[int]:
-				# Set the texture UV.
-				st.set_uv(
-					Vector2(
-						Array(pairs.get(k))[1]
-					)
-				)
-				# Set the lightmap UV.
-				st.set_uv2(
-					Vector2(
-						Array(pairs.get(k))[2]
-					)
-				)
-				
-				# Set the material.
-				if (
-					not mat_path == "" 
-					and not current_material_checked 
-					and not current_loaded_material
-				):
-					# Fix up material path so it works.
-					var n_mat_path: String = mat_path
-					if not n_mat_path.right(1) == "/":
-						n_mat_path += "/"
-					n_mat_path += tex_name.trim_suffix(
-						tex_name.get_extension()
-					) + "tres"
-					
-					# If we don't have a material loaded, we can
-					# check if it exists and load it. Then we say
-					# the material was checked. We only need to
-					# check it once to know if it exists or not.
-					if ResourceLoader.exists(
-						n_mat_path, "Material"
-					):
-						current_loaded_material = load(n_mat_path)
-					current_material_checked = true
-				# We then check if we have a material loaded
-				# after that process.
-				if current_loaded_material:
-					st.set_material(current_loaded_material)
-				
-				st.add_vertex(
-					Vector3(
-						Array(pairs.get(k))[0]
-					)
-				)
+	var lm_path: String = options.get(
+		"lightmaps/lightmap_path"
+	) as String
+	
+	# Mesh construction.
+	if not include_lm:
+		# If we don't include lightmaps.
 		
-		st.generate_normals()
-		st.commit(arr_mesh)
-		st.clear()
-		arr_mesh.surface_set_name(
-			arr_mesh.get_surface_count() - 1, 
-			tex_name.trim_suffix(
-				tex_name.get_extension()
-			).rstrip(".")
-		)
-		current_loaded_material = null
-		current_material_checked = false
+		var curr_mat_checked: bool = false
+		var curr_loaded_mat: Material = null
+		
+		for curr_tex in used_tex:
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			for lm in surf_dict:
+				var lmd: Dictionary = surf_dict.get(
+					lm
+				) as Dictionary
+				if lmd.has(curr_tex):
+					var td: Dictionary = lmd.get(
+						curr_tex
+					) as Dictionary
+					var indices: PackedInt32Array = td.get(
+						"indices"
+					) as PackedInt32Array
+					var pairs: Dictionary = td.get(
+						"pairs"
+					) as Dictionary
+					
+					for i in indices:
+						var pairs_ind: Array = pairs.get(i) as Array
+						
+						st.set_uv(pairs_ind[1])
+						
+						# Set the material.
+						if (
+							not mat_path == "" 
+							and not curr_mat_checked 
+							and not curr_loaded_mat
+						):
+							# Fix up material path so it works.
+							var n_mat_path: String = mat_path
+							if not n_mat_path.right(1) == "/":
+								n_mat_path += "/"
+							n_mat_path += curr_tex.trim_suffix(
+								curr_tex.get_extension()
+							) + "tres"
+							
+							# If we don't have a material loaded,
+							# we can check if it exists and load it.
+							# Then we say the material was checked.
+							# We only need to check it once to know
+							# if it exists or not.
+							if FileAccess.file_exists(
+								n_mat_path
+							):
+								curr_loaded_mat = load(
+									n_mat_path
+								)
+							curr_mat_checked = true
+						# We then check if we have a material
+						# loaded after that process.
+						if curr_loaded_mat:
+							st.set_material(curr_loaded_mat)
+						
+						st.add_vertex(pairs_ind[0])
+			
+			st.generate_normals()
+			st.commit(arr_mesh)
+			st.clear()
+			# WARNING: Textures that are from different
+			# folders but share the same filename will
+			# not be differentiated, and will be treated
+			# as the same texture.
+			arr_mesh.surface_set_name(
+				arr_mesh.get_surface_count() - 1, 
+				curr_tex.get_file().trim_suffix(
+					curr_tex.get_extension()
+				).rstrip(".")
+			)
+			
+			curr_loaded_mat = null
+			curr_mat_checked = false
+	else:
+		# If we include lightmaps.
+		
+		var curr_mat_checked: bool = false
+		var curr_loaded_mat: StandardMaterial3D = null
+		
+		var curr_lm_tex_checked: bool = false
+		var curr_loaded_lm_tex: Texture2D = null
+		
+		var lm_index = 1
+		for lm in surf_dict:
+			var lmd: Dictionary = surf_dict.get(
+				lm
+			) as Dictionary
+			for tex: String in lmd:
+				var lm_mat: ShaderMaterial = null
+				
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				var td: Dictionary = lmd.get(
+					tex
+				) as Dictionary
+				var indices: PackedInt32Array = td.get(
+					"indices"
+				) as PackedInt32Array
+				var pairs: Dictionary = td.get(
+					"pairs"
+				) as Dictionary
+				
+				for i in indices:
+					var pairs_ind: Array = pairs.get(
+						i
+					) as Array
+					
+					st.set_uv(pairs_ind[1])
+					st.set_uv2(pairs_ind[2])
+					
+					if (
+						not mat_path == "" 
+						and not curr_mat_checked 
+						and not curr_loaded_mat
+					):
+						# Fix up material path so it works.
+						var n_mat_path: String = mat_path
+						if not n_mat_path.right(1) == "/":
+							n_mat_path += "/"
+						n_mat_path += tex.trim_suffix(
+							tex.get_extension()
+						) + "tres"
+						
+						# If we don't have a material loaded, we can
+						# check if it exists and load it. Then we say
+						# the material was checked. We only need to
+						# check it once to know if it exists or not.
+						if FileAccess.file_exists(
+							n_mat_path
+						):
+							curr_loaded_mat = load(
+								n_mat_path
+							)
+						curr_mat_checked = true
+					
+					if not lm == "none":
+						if (
+							not curr_lm_tex_checked
+							and not curr_loaded_lm_tex
+						):
+							# Fix up lightmap texture path
+							# so it works. If a lightmap
+							# path is set, the texture files
+							# will be read from there, otherwise,
+							# they will be read from the RMesh
+							# file's directory.
+							var new_lm_tex_path: String = ""
+							if lm_path == "":
+								new_lm_tex_path = (
+									source_file.get_base_dir()
+									+ "/" + lm
+								)
+							else:
+								new_lm_tex_path = (
+									lm_path + "/" + lm
+								)
+							
+							# If we don't have a lightmap texture
+							# loaded, we can check if it exists and
+							# load it. Then we say the texture was
+							# checked. We only need to check it once
+							# to know if it exists or not.
+							if FileAccess.file_exists(
+								new_lm_tex_path
+							):
+								curr_loaded_lm_tex = load(
+									new_lm_tex_path
+								)
+							curr_lm_tex_checked = true
+						
+						if (
+							curr_loaded_lm_tex
+							and curr_loaded_mat
+						):
+							# If the surface has a lightmap
+							# associated with it and we loaded
+							# both the lightmap and the normal
+							# texture, we give it the lightmap
+							# material with both textures applied.
+							if not lm_mat:
+								lm_mat = ShaderMaterial.new()
+								lm_mat.shader = LIGHTMAP_SHADER
+							
+							if curr_loaded_mat.albedo_texture:
+								lm_mat.set_shader_parameter(
+									"texture_albedo",
+									curr_loaded_mat.albedo_texture
+								)
+							
+							if curr_loaded_mat.normal_texture:
+								lm_mat.set_shader_parameter(
+									"texture_normal",
+									curr_loaded_mat.normal_texture
+								)
+								lm_mat.set_shader_parameter(
+									"normal_scale",
+									curr_loaded_mat.normal_scale
+								)
+							
+							lm_mat.set_shader_parameter(
+								"texture_lightmap",
+								curr_loaded_lm_tex
+							)
+							
+							lm_mat.set_shader_parameter(
+								"light_multiplier",
+								options.get(
+									"lightmaps/light_multiplier"
+								)
+							)
+							
+							st.set_material(lm_mat)
+						elif (
+							curr_loaded_lm_tex
+							and not curr_loaded_mat
+						):
+							# If the surface has a lightmap
+							# associated with it and we loaded
+							# it, but we couldn't load the normal
+							# texture, we give it the lightmap
+							# material but only with the lightmap
+							# texture applied.
+							if not lm_mat:
+								lm_mat = ShaderMaterial.new()
+								lm_mat.shader = LIGHTMAP_SHADER
+							
+							lm_mat.set_shader_parameter(
+								"texture_lightmap",
+								curr_loaded_lm_tex
+							)
+							
+							lm_mat.set_shader_parameter(
+								"light_multiplier",
+								options.get(
+									"lightmaps/light_multiplier"
+								)
+							)
+							st.set_material(lm_mat)
+						elif (
+							curr_loaded_mat
+							and not curr_loaded_lm_tex
+						):
+							# If the surface has a lightmap
+							# associated with it, but we can't
+							# load it, we give it the normal
+							# material, if we have one.
+							st.set_material(curr_loaded_mat)
+					elif curr_loaded_mat:
+						# If the surface doesn't have a
+						# lightmap associated with it, we give
+						# it the normal material, if we have one.
+						st.set_material(curr_loaded_mat)
+					
+					st.add_vertex(pairs_ind[0])
+				
+				st.generate_normals()
+				st.commit(arr_mesh)
+				st.clear()
+				
+				# WARNING: Textures that are from different
+				# folders but share the same filename will
+				# not be differentiated, and will be treated
+				# as the same texture.
+				if not lm == "none":
+					arr_mesh.surface_set_name(
+						arr_mesh.get_surface_count() - 1,
+						tex.get_file().trim_suffix(
+							tex.get_extension()
+						).rstrip(".")
+						+ "_lm" + str(lm_index)
+					)
+				else:
+					arr_mesh.surface_set_name(
+						arr_mesh.get_surface_count() - 1,
+						tex.get_file().trim_suffix(
+							tex.get_extension()
+						).rstrip(".")
+					)
+				
+				curr_loaded_lm_tex = null
+				curr_lm_tex_checked = false
+				
+				curr_loaded_mat = null
+				curr_mat_checked = false
+			
+			if not lm == "none":
+				lm_index += 1
 	
 	# Add the mesh to the scene as a MeshInstance3D.
 	var arr_mesh_instance: MeshInstance3D = MeshInstance3D.new()
@@ -534,30 +770,72 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# Generating the collision mesh.
 	if generate_coll:
 		if bool(options.get("collision/split_collision_mesh")):
-			# If we want to create a separate collision shape for
-			# each surface, we have to iterate through each
-			# surface of the entire ArrayMesh, get the arrays of
-			# the given surface, generate a new ArrayMesh from
-			# those arrays and then generate a trimesh collision
-			# from the new ArrayMesh.
-			for i in arr_mesh.get_surface_count():
-				var surf_arrays: Array = (
-					arr_mesh.surface_get_arrays(i)
-				)
+			# We have to iterate through each used texture.
+			# We can't just iterate through each surface in
+			# the mesh due to lightmaps, since with them,
+			# there can be multiple surfaces using the
+			# same texture. 
+			for tex in used_tex:
+				# Get only the texture filename without
+				# the extension.
+				# WARNING: Textures that are from different
+				# folders but share the same filename will
+				# not be differentiated, and will be treated
+				# as the same texture.
+				var tex_name = tex.get_file().trim_suffix(
+					tex.get_extension()
+				).rstrip(".")
+				
+				# The array that will hold the surface arrays
+				# from all the different surfaces using
+				# the current texture.
+				var surf_arrays: Array[Array] = []
+				for i in arr_mesh.get_surface_count():
+					var surf_name: String = (
+						arr_mesh.surface_get_name(i)
+					)
+					# Get the surface name's suffix.
+					# Surface names of meshes with lightmaps
+					# end with something like "_lm".
+					var surf_name_suffix: String = (
+						surf_name.split("_") as Array
+					).back() as String
+					
+					if (
+						surf_name_suffix.begins_with("lm")
+						and surf_name.trim_suffix(
+							"_" + surf_name_suffix
+						) == tex_name
+					):
+						# We don't care about lightmaps when
+						# getting all the surfaces with a specific
+						# texture, so we need to check against
+						# a surface name that's without the
+						# lightmap suffix. If this fixed surface
+						# name the texture name, we add it to
+						# the array.
+						surf_arrays.append(
+							arr_mesh.surface_get_arrays(i)
+						)
+					elif surf_name == tex_name:
+						# If the surface name the texture name,
+						# we add it to the array.
+						surf_arrays.append(
+							arr_mesh.surface_get_arrays(i)
+						)
 				
 				var new_arr_mesh: ArrayMesh = ArrayMesh.new()
-				new_arr_mesh.add_surface_from_arrays(
-					Mesh.PRIMITIVE_TRIANGLES, surf_arrays
-				)
+				for surf in surf_arrays:
+					new_arr_mesh.add_surface_from_arrays(
+						Mesh.PRIMITIVE_TRIANGLES, surf
+					)
 				
 				var coll_body: StaticBody3D = StaticBody3D.new()
-				var coll_body_name: String = (
-					arr_mesh.surface_get_name(i).get_file()
-				)
-				if not coll_body_name.ends_with("_collision"):
-					coll_body_name += "_collision"
+				var coll_body_name: String = tex_name
+				if not coll_body_name.ends_with("_coll"):
+					coll_body_name += "_coll"
 				coll_body.name = coll_body_name
-				arr_mesh_instance.add_child(coll_body)
+				saved_scene_root.add_child(coll_body)
 				coll_body.owner = saved_scene_root
 				
 				var coll_shape: CollisionShape3D = (
@@ -574,8 +852,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				coll_shape.owner = saved_scene_root
 		else:
 			var coll_body: StaticBody3D = StaticBody3D.new()
-			coll_body.name = saved_scene_root_name + "_collision"
-			arr_mesh_instance.add_child(coll_body)
+			coll_body.name = saved_scene_root_name + "_coll"
+			saved_scene_root.add_child(coll_body)
 			coll_body.owner = saved_scene_root
 			
 			var coll_shape: CollisionShape3D = CollisionShape3D.new()
@@ -596,14 +874,16 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				var pairs: Dictionary = i.get(
 					"pairs"
 				) as Dictionary
-				for j in i.get("indices") as Array[int]:
-					invis_st.add_vertex(pairs.get(j))
+				
+				for j in i.get("indices"):
+					invis_st.add_vertex(pairs.get(j)[0])
+			
 			invis_st.generate_normals()
 			var invis_arr_mesh: ArrayMesh = invis_st.commit()
 			
 			var coll_body: StaticBody3D = StaticBody3D.new()
-			coll_body.name = "invisible_collision"
-			arr_mesh_instance.add_child(coll_body)
+			coll_body.name = "invis_coll"
+			saved_scene_root.add_child(coll_body)
 			coll_body.owner = saved_scene_root
 			
 			var coll_shape: CollisionShape3D = CollisionShape3D.new()
@@ -674,73 +954,27 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					
 					# The triangle indice count must be a
 					# multiple of the triangle count.
-					if (
-						curr_trb_tri_indices.size()
-						% curr_trb_tri_count
+					if not helper_funcs.check_tri_ind_count(
+						curr_trb_tri_indices,
+						curr_trb_tri_count
 					):
-						push_error(
-							"SCP-CB Scene import -"
-							+ " Trigger box triangle indice count"
-							+ " is not a multiple of the trigger"
-							+ " box triangle count"
-							+ " (indice count is " 
-							+ str(curr_trb_tri_indices.size())
-							+ ", triangle count is " 
-							+ str(curr_trb_tri_count) + ", " 
-							+ str(curr_trb_tri_indices.size())
-							+ " mod "
-							+ str(curr_trb_tri_count) + " = "
-							+ str(
-								curr_trb_tri_indices.size()
-								% curr_trb_tri_count
-							)
-							+ ")."
-						)
 						return FAILED
 					
 					# For each indice, give it it's
-					# corresponding vertex.
-					var curr_trb_vert_ind_pairs: Dictionary = {}
-					var curr_trb_pos_in_ind_arr: int = -1
-					for k in curr_trb_tri_indices.size() as int:
-						curr_trb_pos_in_ind_arr += 1
-						# If an indice already has vertex data
-						# associated with it, we know we can
-						# just skip it.
-						if not curr_trb_vert_ind_pairs.has(
-							curr_trb_tri_indices[k]
-						):
-							curr_trb_vert_ind_pairs[
-								curr_trb_tri_indices[k]
-							] = [
-								curr_trb_vertices[
-									curr_trb_pos_in_ind_arr
-								]
-							]
-						else:
-							curr_trb_pos_in_ind_arr -= 1
-					
-					# Every vertex should have only one indice
-					# associated with it.
-					if not (
-						curr_trb_vert_ind_pairs.size()
-						== curr_trb_vertices.size()
-					):
-						push_error(
-							"SCP-CB Scene import - Trigger box"
-							+ " vertice-indice pairs array size"
-							+ " doesn't match trigger box"
-							+ " vertices array size. Every indice"
-							+ " should have one set of vertices assigned to it."
-							+ " (vertice-indice pairs array size: " 
-							+ str(curr_trb_vert_ind_pairs.size()) 
-							+ ", vertices array size: "
-							+ str(curr_trb_vertices.size())
-							+ ")"
+					# corresponding vertice.
+					var curr_trb_vert_ind_pairs: Dictionary = (
+						helper_funcs.create_vert_ind_pairs(
+							curr_trb_vertices,
+							curr_trb_tri_indices
 						)
+					)
+					
+					# Check if the vertice-indice pairs creation
+					# process succeeded.
+					if curr_trb_vert_ind_pairs.is_empty():
 						return FAILED
 					
-					var curr_trb_name: String = read_b3d_string(file)
+					var curr_trb_name: String = file.get_pascal_string()
 					
 					var curr_trb_area_node: Area3D = Area3D.new()
 					curr_trb_area_node.name = curr_trb_name
@@ -770,14 +1004,16 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			for i in trb_count as int:
 				var curr_trb_surf_count: int = file.get_32()
 				for j in curr_trb_surf_count as int:
+					# Skip through all the vertices.
 					var curr_trb_vert_count: int = file.get_32()
 					for k in curr_trb_vert_count * 3:
 						file.get_32()
+					# Skip through all the indices.
 					var curr_trb_tri_count: int = file.get_32()
 					for k in curr_trb_tri_count * 3:
 						file.get_32()
 					# Trigger box name
-					read_b3d_string(file) 
+					file.get_pascal_string() 
 	
 	var include_screens: bool = options.get(
 		"entities/screens/include_screens"
@@ -833,42 +1069,38 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		var ent_count: int = file.get_32()
 		for i in ent_count as int:
-			var ent_name: String = read_b3d_string(file)
+			var ent_name: String = file.get_pascal_string()
 			match(ent_name):
 				"screen":
-					# Get screen position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get screen position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get screen image file path.
-					var img_path: String = read_b3d_string(file)
+					var img_path: String = file.get_pascal_string()
 					
 					if include_screens:
 						if not screens_folder_node:
 							screens_folder_node = Node3D.new()
 							screens_folder_node.name = "screens"
-							saved_scene_root.add_child(screens_folder_node)
+							saved_scene_root.add_child(
+								screens_folder_node
+							)
 							screens_folder_node.owner = saved_scene_root
 						
 						var screen_node: Node3D = Node3D.new()
 						screen_node.name = "screen"
 						screen_node.position = pos
-						screens_folder_node.add_child(screen_node, true)
+						screens_folder_node.add_child(
+							screen_node, true
+						)
 						screen_node.owner = saved_scene_root
 				"waypoint":
-					# Get waypoint position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get waypoint position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					if include_waypoints:
 						if not waypoints_folder_node:
@@ -877,7 +1109,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							saved_scene_root.add_child(
 								waypoints_folder_node
 							)
-							waypoints_folder_node.owner = saved_scene_root
+							waypoints_folder_node.owner = (
+								saved_scene_root
+							)
 						
 						var waypoint_node: Node3D = Node3D.new()
 						waypoint_node.name = "waypoint"
@@ -887,21 +1121,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						waypoint_node.owner = saved_scene_root
 				"light":
-					# NOTICE: Lighting will always look different
-					# with imported lights than how it looks
-					# in SCP-CB. The lights receive values from
-					# the file, but you will have to tweak them
-					# more if you want to get them to look the same
-					# (or almost the same) as in SCP-CB.
-					
-					# Get light position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get light position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get light range. 4-byte float.
 					var range: float = (
@@ -910,14 +1133,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					)
 					
 					# Get light color string.
-					var color_string = read_b3d_string(file)
-					var split_color_string: PackedStringArray = (
-						color_string.split(" ")
-					)
-					var actual_color = Color8(
-						int(split_color_string[0]),
-						int(split_color_string[1]),
-						int(split_color_string[2])
+					var color_string = file.get_pascal_string()
+					var actual_color: Color = (
+						helper_funcs.get_color_from_string(
+							color_string
+						)
 					)
 					
 					# Get light intensity. 4-byte float.
@@ -943,21 +1163,10 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						light_node.owner = saved_scene_root
 				"spotlight":
-					# NOTICE: Lighting will always look different
-					# with imported spotlights than how it looks
-					# in SCP-CB. The spotlights receive values from
-					# the file, but you will have to tweak them
-					# more if you want to get them to look the same
-					# (or almost the same) as in SCP-CB.
-					
-					# Get spotlight position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get spotlight position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get spotlight range. 4-byte float.
 					var range: float = (
@@ -966,28 +1175,22 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					)
 					
 					# Get spotlight color string.
-					var color_string = read_b3d_string(file)
-					var split_color_string: PackedStringArray = (
-						color_string.split(" ")
-					)
-					var actual_color = Color8(
-						int(split_color_string[0]),
-						int(split_color_string[1]),
-						int(split_color_string[2])
+					var color_string = file.get_pascal_string()
+					var actual_color: Color = (
+						helper_funcs.get_color_from_string(
+							color_string
+						)
 					)
 					
 					# Get spotlight intensity. 4-byte float.
 					var intensity: float = file.get_float()
 					
 					# Get spotlight angles string.
-					var angles: String = read_b3d_string(file)
-					var angles_split: PackedStringArray = (
-						angles.split(" ")
-					)
-					var rot_from_angles: Vector3 = Vector3(
-						-int(angles_split[0]),
-						int(angles_split[1]),
-						int(angles_split[2])
+					var angles: String = file.get_pascal_string()
+					var rot: Vector3 = (
+						helper_funcs.get_rotation_from_angles(
+							angles
+						)
 					)
 					
 					# Get spotlight inner cone angle. 4-byte int.
@@ -1002,12 +1205,16 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							saved_scene_root.add_child(
 								spotlights_folder_node
 							)
-							spotlights_folder_node.owner = saved_scene_root
+							spotlights_folder_node.owner = (
+								saved_scene_root
+							)
 						
-						var spotlight_node: SpotLight3D = SpotLight3D.new()
+						var spotlight_node: SpotLight3D = (
+							SpotLight3D.new()
+						)
 						spotlight_node.name = "spotlight"
 						spotlight_node.position = pos
-						spotlight_node.rotation_degrees = rot_from_angles
+						spotlight_node.rotation_degrees = rot
 						spotlight_node.spot_range = range
 						spotlight_node.spot_angle = outer_cone_angle
 						spotlight_node.light_color = actual_color
@@ -1017,19 +1224,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						spotlight_node.owner = saved_scene_root
 				"soundemitter":
-					# Get sound emitter position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get sound emitter position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get sound index. 4-byte int.
 					var snd_ind: int = file.get_32()
 					
-					# Get soundemitter range. 4-byte float.
+					# Get sound emitter range. 4-byte float.
 					var range: float = file.get_float()
 					
 					if include_snd_em:
@@ -1054,24 +1257,17 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						)
 						emitter_node.owner = saved_scene_root
 				"playerstart":
-					# Get player start position. Each X, Y and Z
-					# position is a 4-byte float.
-					var pos_x: float = file.get_float()
-					var pos_y: float = file.get_float()
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
+					# Get player start position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
+					)
 					
 					# Get player start angles string.
-					var angles: String = read_b3d_string(file)
-					var angles_split: PackedStringArray = (
-						angles.split(" ")
-					)
-					var rot_from_angles: Vector3 = Vector3(
-						-int(angles_split[0]),
-						int(angles_split[1]),
-						int(angles_split[2])
+					var angles: String = file.get_pascal_string()
+					var rot: Vector3 = (
+						helper_funcs.get_rotation_from_angles(
+							angles
+						)
 					)
 					
 					if include_pl_starts:
@@ -1081,54 +1277,35 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							saved_scene_root.add_child(
 								pl_starts_folder_node
 							)
-							pl_starts_folder_node.owner = saved_scene_root
+							pl_starts_folder_node.owner = (
+								saved_scene_root
+							)
 						
 						var pl_start_node: Node3D = Node3D.new()
 						pl_start_node.name = "playerstart"
 						pl_start_node.position = pos
-						pl_start_node.rotation_degrees = rot_from_angles
+						pl_start_node.rotation_degrees = rot
 						pl_starts_folder_node.add_child(
 							pl_start_node, true
 						)
 						pl_start_node.owner = saved_scene_root
 				"model":
 					# Get model file path.
-					var model_path: String = read_b3d_string(file)
+					var model_path: String = file.get_pascal_string()
 					
-					# Get model position. Each X, Y and Z
-					# position is a 4-byte float.
-					# CBRE-EX 'X' position
-					var pos_x: float = file.get_float()
-					# CBRE-EX 'Z' position
-					var pos_y: float = file.get_float()
-					# CBRE-EX 'Y' position
-					var pos_z: float = file.get_float()
-					var pos: Vector3 = Vector3(
-						pos_x, pos_y, -pos_z
-					) * scale_mesh
-					
-					# Get model rotation. Each X, Y and Z
-					# rotation is a 4-byte float.
-					# CBRE-EX 'X' rotation
-					var rot_x: float = file.get_float()
-					# CBRE-EX 'Z' rotation
-					var rot_y: float = file.get_float()
-					# CBRE-EX 'Y' rotation
-					var rot_z: float = file.get_float()
-					var rot: Vector3 = Vector3(
-						rot_x, rot_y, -rot_z
+					# Get model position.
+					var pos: Vector3 = helper_funcs.get_entity_position(
+						file, scale_mesh
 					)
 					
-					# Get model scale. Each X, Y and Z scale
-					# is a 4-byte float.
-					# CBRE-EX 'X' scale
-					var scale_x: float = file.get_float()
-					# CBRE-EX 'Z' scale
-					var scale_y: float = file.get_float()
-					# CBRE-EX 'Y' scale
-					var scale_z: float = file.get_float()
-					var scale: Vector3 = Vector3(
-						scale_x, scale_y, -scale_z
+					# Get model rotation.
+					var rot: Vector3 = helper_funcs.get_entity_rotation(
+						file
+					)
+					
+					# Get model scale.
+					var scale: Vector3 = helper_funcs.get_entity_scale(
+						file
 					)
 					
 					if include_models:
@@ -1159,15 +1336,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	
 	var saved_scene = PackedScene.new()
 	saved_scene.pack(saved_scene_root)
+	
 	return ResourceSaver.save(
-		saved_scene, 
+		saved_scene,
 		"%s.%s" % [save_path, _get_save_extension()]
 	)
-
-
-func read_b3d_string(file: FileAccess) -> String:
-	var len: int = file.get_32()
-	var string: String = (
-		file.get_buffer(len).get_string_from_utf8()
-	)
-	return string
