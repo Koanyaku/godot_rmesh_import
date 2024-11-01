@@ -11,7 +11,7 @@
 
 In this guide, I will show you how to import RMesh files exported with CBRE-EX, and all the different import options you can utilize.
 
-> ⚠️ **This addon has only been tested with files exported with CBRE-EX v2.1.0. I don't know how or if it works for files from other versions.**
+> ⚠️ **This addon has only been tested with files exported with CBRE-EX v2.1.0+. I don't know how or if it works for files from other versions.**
 
 When Godot detects the RMesh file, it will try to automatically import it, but it will usually import it with an incorrect importer. What you are interested in when importing CBRE-EX files is "**CBRE-EX RMesh as Mesh**" and "**CBRE-EX RMesh as PackedScene**".
 

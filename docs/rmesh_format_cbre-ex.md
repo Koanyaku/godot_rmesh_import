@@ -1,7 +1,7 @@
 
 # CBRE-EX RMesh file format
 
-This document explains how RMesh files exported by CBRE-EX are stored internally. The files in question are exported from **CBRE-EX v2.1.0**.
+This document explains how RMesh files exported by CBRE-EX are stored internally. The files in question are exported from **CBRE-EX v2.1.0+**.
 
 This document expects that you understand the basics C# data types, as CBRE-EX is written in C#.
 
