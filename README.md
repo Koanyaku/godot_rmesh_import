@@ -29,6 +29,6 @@ Some extra stuff...
 
 Now, go wild! **_BUT!_** Read this first:
 
-> ⚠️ **This addon should work with all RMesh files, but exceptions always occur. Please open an [issue](https://github.com/Koanyaku/godot_rmesh_import/issues) if you encounter something unexpected. Also, I created this addon for Godot 4.2+, and RMesh files from either SCP – Containment Breach v1.3.11 or CBRE-EX v2.1.0+, and I don't know how this addon behaves with other Godot versions or RMesh files listed above.**
+> ⚠️ **This addon should work with all RMesh files, but exceptions always occur. Please open an [issue](https://github.com/Koanyaku/godot_rmesh_import/issues) if you encounter something unexpected. Also, I created this addon for Godot 4.2+, and RMesh files from either SCP – Containment Breach v1.3.11+ or CBRE-EX v2.1.0+, and I don't know how this addon behaves with other Godot versions or RMesh files listed above.**
 
 🌺 Also, if you want to, you can support me [**here**](https://ko-fi.com/koanyaku). :)

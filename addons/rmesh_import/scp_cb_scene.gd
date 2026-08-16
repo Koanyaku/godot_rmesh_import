@@ -499,12 +499,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						
 						# Set the material.
 						if (
-							not mat_path == "" 
-							and not curr_mat_checked 
+							not curr_mat_checked 
 							and not curr_loaded_mat
 						):
 							# Fix up material path so it works.
 							var n_mat_path: String = mat_path
+							if mat_path == "":
+								n_mat_path += source_file.get_base_dir() + "/"
 							if not n_mat_path.right(1) == "/":
 								n_mat_path += "/"
 							n_mat_path += curr_tex.trim_suffix(
@@ -583,12 +584,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					st.set_uv2(pairs_ind[2])
 					
 					if (
-						not mat_path == "" 
-						and not curr_mat_checked 
+						not curr_mat_checked 
 						and not curr_loaded_mat
 					):
 						# Fix up material path so it works.
 						var n_mat_path: String = mat_path
+						if mat_path == "":
+							n_mat_path += source_file.get_base_dir() + "/"
 						if not n_mat_path.right(1) == "/":
 							n_mat_path += "/"
 						n_mat_path += tex.trim_suffix(
