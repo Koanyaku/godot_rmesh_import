@@ -61,7 +61,9 @@ When you select "**SCP – CB RMesh as Mesh**" in the import tab, you will see t
 
     - Material Path
     
-        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If the material can't be found, the surface will be without a material.
+        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If this path is empty, the importer will search in the same path as the RMesh file. If a material resource can't be found, the surface will be without a material.<br><br>
+     
+      > ⚠️ **This path is based on the texture path in the RMesh file. You most likely won't need to worry about this breaking, since SCP – CB has RMesh files and texture files in the same folder, meaning any singular folder with all the textures should work fine, but it's good to keep in mind.**
 
 ## 3. Importing as PackedScene
 
@@ -108,7 +110,9 @@ When you select "**SCP – CB RMesh as PackedScene**" in the import tab, you wil
 
     - Material Path
     
-        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If the material can't be found, the surface will be without a material.
+        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If this path is empty, the importer will search in the same path as the RMesh file. If a material resource can't be found, the surface will be without a material.<br><br>
+     
+      > ⚠️ **This path is based on the texture path in the RMesh file. You most likely won't need to worry about this breaking, since SCP – CB has RMesh files and texture files in the same folder, meaning any singular folder with all the textures should work fine, but it's good to keep in mind.**
 
 ---
 

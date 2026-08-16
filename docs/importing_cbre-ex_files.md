@@ -61,7 +61,9 @@ When you select "**CBRE-EX RMesh as Mesh**" in the import tab, you will see thes
 
     - Material Path
     
-        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If the material can't be found, the surface will be without a material.
+        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If the material can't be found, the surface will be without a material.<br><br>
+
+      > ⚠️ **This path is based on the texture path set in CBRE-EX. For example, if the texture path in CBRE-EX is set to the 'map' folder inside your Godot project's 'res://textures/' folder (so 'res://textures/map'), the path you should set in this import setting would be one folder above the 'map' folder, so in this case the 'textures' folder.**
 
 ## 3. Importing as PackedScene
 
@@ -123,7 +125,9 @@ When you select "**CBRE-EX RMesh as PackedScene**" in the import tab, you will s
 
     - Material Path
     
-        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If the material can't be found, the surface will be without a material.
+        - A [String](https://docs.godotengine.org/en/stable/classes/class_string.html) value. An optional path to where the mesh's materials are located. The importer will automatically detect [Material](https://docs.godotengine.org/en/stable/classes/class_material.html) resource .tres files with the same name as the textures in the RMesh file and apply them to their respective surfaces. If the material can't be found, the surface will be without a material.<br><br>
+
+        > ⚠️ **This path is based on the texture path set in CBRE-EX. For example, if the texture path in CBRE-EX is set to the 'map' folder inside your Godot project's 'res://textures/' folder (so 'res://textures/map'), the path you should set in this import setting would be one folder above the 'map' folder, so in this case the 'textures' folder.**
 
 ---
 
