@@ -2,16 +2,15 @@
 @tool
 extends EditorImportPlugin
 
-enum PRESETS { DEFAULT }
+enum PRESETS {
+	DEFAULT
+}
 
-
-const LIGHTMAP_SHADER: Shader = preload(
-	"res://addons/rmesh_import/lightmap.gdshader"
+const _LIGHTMAP_SHADER: Shader = preload(
+		"res://addons/rmesh_import/lightmap.gdshader"
 )
-
-var helper_funcs = preload(
-	"res://addons/rmesh_import/helper_funcs.gd"
-).new()
+const _UTILS := preload("res://addons/rmesh_import/utils.gd")
+const _HELPER_FUNCS = preload("res://addons/rmesh_import/helper_funcs.gd")
 
 
 # Fix crash when importing multiple files with threads.
@@ -48,7 +47,7 @@ func _get_preset_count():
 	return PRESETS.size()
 
 
-func _get_preset_name(preset_index) -> String:
+func _get_preset_name(preset_index: int) -> String:
 	match preset_index:
 		PRESETS.DEFAULT:
 			return "Default"
@@ -60,49 +59,74 @@ func _get_import_order() -> ImportOrder:
 	return IMPORT_ORDER_DEFAULT
 
 
-func _get_import_options(path, preset_index) -> Array[Dictionary]:
-	match preset_index:
-		PRESETS.DEFAULT:
-			return [
-				{
-					"name": "mesh/scale_mesh",
-					"default_value": Vector3(1,1,1),
-					"property_hint": PROPERTY_HINT_LINK,
-				},
-				{
-					"name": "lightmaps/include_lightmaps",
-					"default_value": false,
-				},
-				{
-					"name": "lightmaps/light_multiplier",
-					"default_value": 1.0,
-					"property_hint": PROPERTY_HINT_RANGE,
-					"hint_string": "0,0,0.001,or_greater,hide_slider",
-				},
-				{
-					"name": "lightmaps/lightmap_path",
-					"default_value": "",
-					"property_hint": PROPERTY_HINT_DIR,
-				},
-				{
-					"name": "mesh/include_invisible_collisions",
-					"default_value": true,
-				},
-				{
-					"name": "materials/material_path",
-					"default_value": "",
-					"property_hint": PROPERTY_HINT_DIR,
-				},
-			]
-		_:
-			return []
+func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]:
+	var options: Array[Dictionary] = []
+	
+	# The options here have been ordered from what I thought the user would
+	# find the most important to the least important.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_SCALE_MESH,
+			"default_value": Vector3(1, 1, 1),
+			"property_hint": PROPERTY_HINT_LINK,
+	})
+	
+	# Materials.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_MATERIAL_PATH,
+			"default_value": "",
+			"property_hint": PROPERTY_HINT_DIR,
+	})
+	
+	# Lightmaps.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_LIGHTMAPS,
+			"default_value": false,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			)
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHT_MULTIPLIER,
+			"default_value": 1.0,
+			"property_hint": PROPERTY_HINT_RANGE,
+			"hint_string": "0, 0, 0.001, or_greater, hide_slider",
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHTMAP_PATH,
+			"default_value": "",
+			"property_hint": PROPERTY_HINT_DIR,
+	})
+	
+	# Collisions.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_INVISIBLE_COLLISIONS,
+			"default_value": true
+	})
+	
+	return options
 
 
-func _get_option_visibility(path: String, option_name: StringName, options: Dictionary) -> bool:
+func _get_option_visibility(
+		path: String, option_name: StringName, options: Dictionary
+) -> bool:
+	if (
+			option_name == _UTILS.OPTION_LIGHT_MULTIPLIER
+			or option_name == _UTILS.OPTION_LIGHTMAP_PATH
+	):
+		return options.get(_UTILS.OPTION_INCLUDE_LIGHTMAPS)
+	
 	return true
 
 
-func _import(source_file: String, save_path: String, options: Dictionary, platform_variants: Array[String], gen_files: Array[String]) -> Error:
+func _import(
+		source_file: String, save_path: String, options: Dictionary, 
+		platform_variants: Array[String], gen_files: Array[String]
+) -> Error:
 	var file: FileAccess = FileAccess.open(
 		source_file, FileAccess.READ
 	)
@@ -248,7 +272,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if not helper_funcs.check_tri_ind_count(
+		if not _HELPER_FUNCS.check_tri_ind_count(
 			tri_indices,
 			tri_count
 		):
@@ -258,13 +282,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# texture UV and lightmap UV.
 		var vert_ind_pairs: Dictionary = {}
 		if include_lm:
-			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs, lm_uvs]
 			)
 		else:
-			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs]
@@ -336,7 +360,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if not helper_funcs.check_tri_ind_count(
+		if not _HELPER_FUNCS.check_tri_ind_count(
 			invis_coll_tri_indices,
 			invis_coll_tri_count
 		):
@@ -345,7 +369,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		# For each invisible collision indice, give it
 		# it's corresponding vertice.
 		var invis_coll_vert_ind_pairs: Dictionary = (
-			helper_funcs.create_vert_ind_pairs(
+			_HELPER_FUNCS.create_vert_ind_pairs(
 				invis_coll_vertices,
 				invis_coll_tri_indices
 			)
@@ -562,7 +586,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							# material with both textures applied.
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
-								lm_mat.shader = LIGHTMAP_SHADER
+								lm_mat.shader = _LIGHTMAP_SHADER
 							
 							if curr_loaded_mat.albedo_texture:
 								lm_mat.set_shader_parameter(
@@ -605,7 +629,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							# texture applied.
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
-								lm_mat.shader = LIGHTMAP_SHADER
+								lm_mat.shader = _LIGHTMAP_SHADER
 							
 							lm_mat.set_shader_parameter(
 								"texture_lightmap",

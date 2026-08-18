@@ -9,36 +9,8 @@ enum PRESETS {
 const _LIGHTMAP_SHADER: Shader = preload(
 		"res://addons/rmesh_import/lightmap.gdshader"
 )
-const _OPTION_SCALE_MESH := "mesh/scale_mesh"
-const _OPTION_INCLUDE_LIGHTMAPS := "lightmaps/include_lightmaps"
-const _OPTION_LIGHT_MULTIPLIER := "lightmaps/light_multiplier"
-const _OPTION_LIGHTMAP_PATH := "lightmaps/lightmap_path"
-const _OPTION_GENERATE_COLLISION_MESH := "collision/generate_collision_mesh"
-const _OPTION_INCLUDE_INVISIBLE_COLLISIONS := (
-		"collision/include_invisible_collisions"
-)
-const _OPTION_SPLIT_COLLISION_MESH := "collision/split_collision_mesh"
-const _OPTION_MATERIAL_PATH := "materials/material_path"
-const _OPTION_INCLUDE_TRIGGER_BOXES := "trigger_boxes/include_trigger_boxes"
-const _OPTION_INCLUDE_ENTITIES := "entities/include_entities"
-const _OPTION_INCLUDE_SCREENS := "entities/screens_include_screens"
-const _OPTION_INCLUDE_WAYPOINTS := "entities/waypoints/include_waypoints"
-const _OPTION_INCLUDE_LIGHTS := "entities/lights/include_lights"
-const _OPTION_LIGHT_RANGE_SCALE := "entities/lights/light_range_scale"
-const _OPTION_INCLUDE_SPOTLIGHTS := "entities/spotlights/include_spotlights"
-const _OPTION_SPOTLIGHT_RANGE_SCALE := (
-		"entities/spotlights/spotlight_range_scale"
-)
-const _OPTION_INCLUDE_SOUND_EMITTERS := (
-		"entities/sound_emitters/include_sound_emitters"
-)
-const _OPTION_SOUND_RANGE_SCALE := "entities/sound_emitters/sound_range_scale"
-const _OPTION_INCLUDE_PLAYER_STARTS := (
-		"entities/player_starts/include_player_starts"
-)
-const _OPTION_INCLUDE_MODELS := "entities/models/include_models"
-
-var helper_funcs = preload("res://addons/rmesh_import/helper_funcs.gd").new()
+const _UTILS := preload("res://addons/rmesh_import/utils.gd")
+const _HELPER_FUNCS = preload("res://addons/rmesh_import/helper_funcs.gd")
 
 
 # Fix crash when importing multiple files with threads.
@@ -75,7 +47,7 @@ func _get_preset_count():
 	return PRESETS.size()
 
 
-func _get_preset_name(preset_index) -> String:
+func _get_preset_name(preset_index: int) -> String:
 	match preset_index:
 		PRESETS.DEFAULT:
 			return "Default"
@@ -87,107 +59,177 @@ func _get_import_order() -> ImportOrder:
 	return IMPORT_ORDER_DEFAULT
 
 
-func _get_import_options(path, preset_index) -> Array[Dictionary]:
-	match preset_index:
-		PRESETS.DEFAULT:
-			return [
-				{
-					"name": "mesh/scale_mesh",
-					"default_value": Vector3(1,1,1),
-					"property_hint": PROPERTY_HINT_LINK,
-				},
-				{
-					"name": "lightmaps/include_lightmaps",
-					"default_value": false,
-				},
-				{
-					"name": "lightmaps/light_multiplier",
-					"default_value": 1.0,
-					"property_hint": PROPERTY_HINT_RANGE,
-					"hint_string": "0,0,0.001,or_greater,hide_slider",
-				},
-				{
-					"name": "lightmaps/lightmap_path",
-					"default_value": "",
-					"property_hint": PROPERTY_HINT_DIR,
-				},
-				{
-					"name": "collision/generate_collision_mesh",
-					"default_value": false,
-				},
-				{
-					"name": "collision/include_invisible_collisions",
-					"default_value": false,
-				},
-				{
-					"name": "collision/split_collision_mesh",
-					"default_value": false,
-				},
-				{
-					"name": "materials/material_path",
-					"default_value": "",
-					"property_hint": PROPERTY_HINT_DIR,
-				},
-				{
-					"name": "trigger_boxes/include_trigger_boxes",
-					"default_value": true,
-				},
-				{
-					"name": "entities/include_entities",
-					"default_value": true,
-				},
-				{
-					"name": "entities/screens/include_screens",
-					"default_value": true,
-				},
-				{
-					"name": "entities/waypoints/include_waypoints",
-					"default_value": true,
-				},
-				{
-					"name": "entities/lights/include_lights",
-					"default_value": true,
-				},
-				{
-					"name": "entities/lights/light_range_scale",
-					"default_value": 1.0,
-				},
-				{
-					"name": "entities/spotlights/include_spotlights",
-					"default_value": true,
-				},
-				{
-					"name": "entities/spotlights/spotlight_range_scale",
-					"default_value": 1.0,
-				},
-				{
-					"name": "entities/sound_emitters/include_sound_emitters",
-					"default_value": true,
-				},
-				{
-					"name": "entities/sound_emitters/sound_range_scale",
-					"default_value": 1.0,
-				},
-				{
-					"name": "entities/player_starts/include_player_starts",
-					"default_value": true,
-				},
-				{
-					"name": "entities/models/include_models",
-					"default_value": true,
-				},
-			]
-		_:
-			return []
+func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]:
+	var options: Array[Dictionary] = []
+	
+	# The options here have been ordered from what I thought the user would
+	# find the most important to the least important.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_SCALE_MESH,
+			"default_value": Vector3(1, 1, 1),
+			"property_hint": PROPERTY_HINT_LINK,
+	})
+	
+	# Materials.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_MATERIAL_PATH,
+			"default_value": "",
+			"property_hint": PROPERTY_HINT_DIR,
+	})
+	
+	# Lightmaps.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_LIGHTMAPS,
+			"default_value": false,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			),
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHT_MULTIPLIER,
+			"default_value": 1.0,
+			"property_hint": PROPERTY_HINT_RANGE,
+			"hint_string": "0, 0, 0.001, or_greater, hide_slider",
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHTMAP_PATH,
+			"default_value": "",
+			"property_hint": PROPERTY_HINT_DIR,
+	})
+	
+	# Collisions.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_GENERATE_COLLISION_MESH,
+			"default_value": false,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			),
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_SPLIT_COLLISION_MESH,
+			"default_value": false,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_INVISIBLE_COLLISIONS,
+			"default_value": true,
+	})
+	
+	# Trigger boxes.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_TRIGGER_BOXES,
+			"default_value": true,
+	})
+	
+	# Entities.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_ENTITIES,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			),
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_LIGHTS,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			),
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHT_RANGE_SCALE,
+			"default_value": 1.0,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_SPOTLIGHTS,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			),
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_SPOTLIGHT_RANGE_SCALE,
+			"default_value": 1.0,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_MODELS,
+			"default_value": true,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_WAYPOINTS,
+			"default_value": true,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_SOUND_EMITTERS,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			),
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_SOUND_RANGE_SCALE,
+			"default_value": 1.0,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_SCREENS,
+			"default_value": true,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_PLAYER_STARTS,
+			"default_value": true,
+	})
+	
+	return options
 
 
 func _get_option_visibility(
 		path: String, option_name: StringName, options: Dictionary
 ) -> bool:
-	#if (
-			#option_name == "lightmaps/light_multiplier" 
-			#or option_name == "lightmaps/lightmap_path"
-	#):
+	if (
+			option_name == _UTILS.OPTION_LIGHT_MULTIPLIER
+			or option_name == _UTILS.OPTION_LIGHTMAP_PATH
+	):
+		return options.get(_UTILS.OPTION_INCLUDE_LIGHTMAPS)
+	
+	if (
+			option_name == _UTILS.OPTION_SPLIT_COLLISION_MESH
+			or option_name == _UTILS.OPTION_INCLUDE_INVISIBLE_COLLISIONS
+	):
+		return options.get(_UTILS.OPTION_GENERATE_COLLISION_MESH)
+	
+	if options.get(_UTILS.OPTION_INCLUDE_ENTITIES):
+		match option_name:
+			_UTILS.OPTION_LIGHT_RANGE_SCALE:
+				return options.get(_UTILS.OPTION_INCLUDE_LIGHTS)
+			_UTILS.OPTION_SPOTLIGHT_RANGE_SCALE:
+				return options.get(_UTILS.OPTION_INCLUDE_SPOTLIGHTS)
+			_UTILS.OPTION_SOUND_RANGE_SCALE:
+				return options.get(_UTILS.OPTION_INCLUDE_SOUND_EMITTERS)
+	elif (
+			option_name == _UTILS.OPTION_INCLUDE_LIGHTS
+			or option_name == _UTILS.OPTION_LIGHT_RANGE_SCALE
+			or option_name == _UTILS.OPTION_INCLUDE_SPOTLIGHTS
+			or option_name == _UTILS.OPTION_SPOTLIGHT_RANGE_SCALE
+			or option_name == _UTILS.OPTION_INCLUDE_MODELS
+			or option_name == _UTILS.OPTION_INCLUDE_WAYPOINTS
+			or option_name == _UTILS.OPTION_INCLUDE_SOUND_EMITTERS
+			or option_name == _UTILS.OPTION_SOUND_RANGE_SCALE
+			or option_name == _UTILS.OPTION_INCLUDE_SCREENS
+			or option_name == _UTILS.OPTION_INCLUDE_PLAYER_STARTS
+	):
+		return options.get(_UTILS.OPTION_INCLUDE_ENTITIES)
+	
 	return true
 
 
@@ -345,7 +387,7 @@ func _import(
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if not helper_funcs.check_tri_ind_count(
+		if not _HELPER_FUNCS.check_tri_ind_count(
 			tri_indices,
 			tri_count
 		):
@@ -355,13 +397,13 @@ func _import(
 		# texture UV and lightmap UV.
 		var vert_ind_pairs: Dictionary = {}
 		if include_lm:
-			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs, lm_uvs]
 			)
 		else:
-			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
+			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs]
@@ -445,7 +487,7 @@ func _import(
 				
 				# The triangle indice count must be a multiple
 				# of the triangle count.
-				if not helper_funcs.check_tri_ind_count(
+				if not _HELPER_FUNCS.check_tri_ind_count(
 					invis_coll_tri_indices,
 					invis_coll_tri_count
 				):
@@ -454,7 +496,7 @@ func _import(
 				# For each invisible collision indice, give it
 				# it's corresponding vertice.
 				var invis_coll_vert_ind_pairs: Dictionary = (
-					helper_funcs.create_vert_ind_pairs(
+					_HELPER_FUNCS.create_vert_ind_pairs(
 						invis_coll_vertices,
 						invis_coll_tri_indices
 					)
@@ -985,7 +1027,7 @@ func _import(
 					
 					# The triangle indice count must be a
 					# multiple of the triangle count.
-					if not helper_funcs.check_tri_ind_count(
+					if not _HELPER_FUNCS.check_tri_ind_count(
 						curr_trb_tri_indices,
 						curr_trb_tri_count
 					):
@@ -994,7 +1036,7 @@ func _import(
 					# For each indice, give it it's
 					# corresponding vertice.
 					var curr_trb_vert_ind_pairs: Dictionary = (
-						helper_funcs.create_vert_ind_pairs(
+						_HELPER_FUNCS.create_vert_ind_pairs(
 							curr_trb_vertices,
 							curr_trb_tri_indices
 						)
@@ -1104,7 +1146,7 @@ func _import(
 			match(ent_name):
 				"screen":
 					# Get screen position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
+					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1129,7 +1171,7 @@ func _import(
 						screen_node.owner = saved_scene_root
 				"waypoint":
 					# Get waypoint position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
+					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1153,7 +1195,7 @@ func _import(
 						waypoint_node.owner = saved_scene_root
 				"light":
 					# Get light position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
+					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1166,7 +1208,7 @@ func _import(
 					# Get light color string.
 					var color_string = source.get_pascal_string()
 					var actual_color: Color = (
-						helper_funcs.get_color_from_string(
+						_HELPER_FUNCS.get_color_from_string(
 							color_string
 						)
 					)
@@ -1195,7 +1237,7 @@ func _import(
 						light_node.owner = saved_scene_root
 				"spotlight":
 					# Get spotlight position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
+					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1208,7 +1250,7 @@ func _import(
 					# Get spotlight color string.
 					var color_string = source.get_pascal_string()
 					var actual_color: Color = (
-						helper_funcs.get_color_from_string(
+						_HELPER_FUNCS.get_color_from_string(
 							color_string
 						)
 					)
@@ -1219,7 +1261,7 @@ func _import(
 					# Get spotlight angles string.
 					var angles: String = source.get_pascal_string()
 					var rot: Vector3 = (
-						helper_funcs.get_rotation_from_angles(
+						_HELPER_FUNCS.get_rotation_from_angles(
 							angles
 						)
 					)
@@ -1256,7 +1298,7 @@ func _import(
 						spotlight_node.owner = saved_scene_root
 				"soundemitter":
 					# Get sound emitter position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
+					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1289,14 +1331,14 @@ func _import(
 						emitter_node.owner = saved_scene_root
 				"playerstart":
 					# Get player start position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
+					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
 						source, scale_mesh
 					)
 					
 					# Get player start angles string.
 					var angles: String = source.get_pascal_string()
 					var rot: Vector3 = (
-						helper_funcs.get_rotation_from_angles(
+						_HELPER_FUNCS.get_rotation_from_angles(
 							angles
 						)
 					)
@@ -1325,17 +1367,17 @@ func _import(
 					var model_path: String = source.get_pascal_string()
 					
 					# Get model position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
+					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
 						source, scale_mesh
 					)
 					
 					# Get model rotation.
-					var rot: Vector3 = helper_funcs.get_entity_rotation(
+					var rot: Vector3 = _HELPER_FUNCS.get_entity_rotation(
 						source
 					)
 					
 					# Get model scale.
-					var scale: Vector3 = helper_funcs.get_entity_scale(
+					var scale: Vector3 = _HELPER_FUNCS.get_entity_scale(
 						source
 					)
 					

@@ -1,11 +1,13 @@
 extends Node
 ## Helper functions for RMesh importing.
 
-
 ## Create vertice-indice pairs from [param vertices] and
 ## [param indices]. Additional [param data] can be passed
 ## that will be included with the indice.
-func create_vert_ind_pairs(vertices: PackedVector3Array, indices: PackedInt32Array, data: Array = []) -> Dictionary:
+static func create_vert_ind_pairs(
+		vertices: PackedVector3Array, indices: PackedInt32Array, 
+		data: Array = []
+) -> Dictionary:
 	var pairs: Dictionary = {}
 	
 	# This value is the position from which we will read vertice
@@ -68,76 +70,63 @@ func create_vert_ind_pairs(vertices: PackedVector3Array, indices: PackedInt32Arr
 	return pairs
 
 
-func check_tri_ind_count(indices: PackedInt32Array, tri_count: int) -> bool:
+static func check_tri_ind_count(
+		indices: PackedInt32Array, tri_count: int
+) -> bool:
 	var ind_size: int = indices.size()
 	
 	# The triangle indice count must be a
 	# multiple of the triangle count.
+	# This checks if the result is bigger than 0.
 	if (ind_size % tri_count):
 		push_error(
-			"Triangle indice count is not a multiple of the"
-			+ " triangle count (indice count is "
-			+ str(ind_size) + ", triangle count is "
-			+ str(tri_count) + ", " + str(ind_size)
-			+ " mod " + str(tri_count) + " = "
-			+ str(ind_size % tri_count) + ")."
+				"Triangle indice count is not a multiple of the triangle count"
+				+ " (indice count is " + str(ind_size) + ", triangle count is "
+				+ str(tri_count) + ", " + str(ind_size)+ " mod " 
+				+ str(tri_count) + " = " + str(ind_size % tri_count) + ")."
 		)
 		return false
 	
 	return true
 
-func get_entity_position(file: FileAccess, scale: Vector3) -> Vector3:
+
+static func get_entity_position(file: FileAccess, scale: Vector3) -> Vector3:
 	# Each X, Y and Z position is a 4-byte float.
 	var pos_x: float = file.get_float()
 	var pos_y: float = file.get_float()
 	var pos_z: float = file.get_float()
-	var pos: Vector3 = Vector3(
-		pos_x, pos_y, -pos_z
-	) * scale
-	return pos
+	return Vector3(pos_x, pos_y, -pos_z) * scale
 
 
-func get_entity_rotation(file: FileAccess) -> Vector3:
+static func get_entity_rotation(file: FileAccess) -> Vector3:
 	# Each X, Y and Z rotation is a 4-byte float.
 	var rot_x: float = file.get_float()
 	var rot_y: float = file.get_float()
 	var rot_z: float = file.get_float()
-	var rot: Vector3 = Vector3(
-		rot_x, rot_y, -rot_z
-	)
-	return rot
+	return Vector3(rot_x, rot_y, -rot_z)
 
 
-func get_entity_scale(file: FileAccess) -> Vector3:
+static func get_entity_scale(file: FileAccess) -> Vector3:
 	# Each X, Y and Z scale is a 4-byte float.
 	var scale_x: float = file.get_float()
 	var scale_y: float = file.get_float()
 	var scale_z: float = file.get_float()
-	var scale: Vector3 = Vector3(
-		scale_x, scale_y, -scale_z
-	)
-	return scale
+	return Vector3(scale_x, scale_y, -scale_z)
 
 
-func get_rotation_from_angles(angles: String) -> Vector3:
-	var angles_split: PackedStringArray = (
-		angles.split(" ")
+static func get_rotation_from_angles(angles: String) -> Vector3:
+	var angles_split: PackedStringArray = angles.split(" ")
+	return Vector3(
+			-int(angles_split[0]),
+			int(angles_split[1]),
+			int(angles_split[2])
 	)
-	var rot: Vector3 = Vector3(
-		-int(angles_split[0]),
-		int(angles_split[1]),
-		int(angles_split[2])
-	)
-	return rot
 
 
-func get_color_from_string(color: String) -> Color:
-	var split_color_string: PackedStringArray = (
-		color.split(" ")
+static func get_color_from_string(color: String) -> Color:
+	var split_color_string: PackedStringArray = color.split(" ")
+	return Color8(
+			int(split_color_string[0]),
+			int(split_color_string[1]),
+			int(split_color_string[2])
 	)
-	var new_color = Color8(
-		int(split_color_string[0]),
-		int(split_color_string[1]),
-		int(split_color_string[2])
-	)
-	return new_color
