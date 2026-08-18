@@ -10,7 +10,6 @@ const _LIGHTMAP_SHADER: Shader = preload(
 		"res://addons/rmesh_import/lightmap.gdshader"
 )
 const _UTILS := preload("res://addons/rmesh_import/utils.gd")
-const _HELPER_FUNCS = preload("res://addons/rmesh_import/helper_funcs.gd")
 
 
 # Fix crash when importing multiple files with threads.
@@ -237,15 +236,13 @@ func _import(
 		source_file: String, save_path: String, options: Dictionary, 
 		platform_variants: Array[String], gen_files: Array[String]
 ) -> Error:
-	var source: FileAccess = FileAccess.open(
-			source_file, FileAccess.READ
-	)
+	var source: FileAccess = FileAccess.open(source_file, FileAccess.READ)
 	if not is_instance_valid(source):
 		return FileAccess.get_open_error()
 	
 	# Get the header. It should either be "RoomMesh" 
 	# or "RoomMesh.HasTriggerBox".
-	var header: String = source.get_pascal_string()
+	var header := source.get_pascal_string()
 	if (
 			not header == "RoomMesh" 
 			and not header == "RoomMesh.HasTriggerBox"
@@ -257,10 +254,10 @@ func _import(
 		)
 		return FAILED
 	
-	var scale_mesh: Vector3 = options.get("mesh/scale_mesh")
-	var include_lm: bool = options.get("lightmaps/include_lightmaps")
+	var scale_mesh: Vector3 = options.get(_UTILS.OPTION_SCALE_MESH)
+	var include_lightmaps: bool = options.get(_UTILS.OPTION_INCLUDE_LIGHTMAPS)
 	
-	var saved_scene_root: Node3D = Node3D.new()
+	var saved_scene_root := Node3D.new()
 	var saved_scene_root_name: String = (
 			source_file.get_file().trim_suffix(".rmesh")
 	)
@@ -369,7 +366,7 @@ func _import(
 			tex_uvs.append(Vector2(tex_u, tex_v))
 			# We don't care about lightmap UVs if we don't
 			# include lightmaps.
-			if include_lm:
+			if include_lightmaps:
 				lm_uvs.append(Vector2(lm_u, lm_v))
 			
 			# The data for each vertex ends with three
@@ -387,7 +384,7 @@ func _import(
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if not _HELPER_FUNCS.check_tri_ind_count(
+		if not _UTILS.check_tri_ind_count(
 			tri_indices,
 			tri_count
 		):
@@ -397,13 +394,13 @@ func _import(
 		# texture UV and lightmap UV.
 		var vert_ind_pairs: Dictionary = {}
 		if include_lm:
-			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
+			vert_ind_pairs = _UTILS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs, lm_uvs]
 			)
 		else:
-			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
+			vert_ind_pairs = _UTILS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs]
@@ -487,7 +484,7 @@ func _import(
 				
 				# The triangle indice count must be a multiple
 				# of the triangle count.
-				if not _HELPER_FUNCS.check_tri_ind_count(
+				if not _UTILS.check_tri_ind_count(
 					invis_coll_tri_indices,
 					invis_coll_tri_count
 				):
@@ -496,7 +493,7 @@ func _import(
 				# For each invisible collision indice, give it
 				# it's corresponding vertice.
 				var invis_coll_vert_ind_pairs: Dictionary = (
-					_HELPER_FUNCS.create_vert_ind_pairs(
+					_UTILS.create_vert_ind_pairs(
 						invis_coll_vertices,
 						invis_coll_tri_indices
 					)
@@ -1027,7 +1024,7 @@ func _import(
 					
 					# The triangle indice count must be a
 					# multiple of the triangle count.
-					if not _HELPER_FUNCS.check_tri_ind_count(
+					if not _UTILS.check_tri_ind_count(
 						curr_trb_tri_indices,
 						curr_trb_tri_count
 					):
@@ -1036,7 +1033,7 @@ func _import(
 					# For each indice, give it it's
 					# corresponding vertice.
 					var curr_trb_vert_ind_pairs: Dictionary = (
-						_HELPER_FUNCS.create_vert_ind_pairs(
+						_UTILS.create_vert_ind_pairs(
 							curr_trb_vertices,
 							curr_trb_tri_indices
 						)
@@ -1146,7 +1143,7 @@ func _import(
 			match(ent_name):
 				"screen":
 					# Get screen position.
-					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
+					var pos: Vector3 = _UTILS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1171,7 +1168,7 @@ func _import(
 						screen_node.owner = saved_scene_root
 				"waypoint":
 					# Get waypoint position.
-					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
+					var pos: Vector3 = _UTILS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1195,7 +1192,7 @@ func _import(
 						waypoint_node.owner = saved_scene_root
 				"light":
 					# Get light position.
-					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
+					var pos: Vector3 = _UTILS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1208,7 +1205,7 @@ func _import(
 					# Get light color string.
 					var color_string = source.get_pascal_string()
 					var actual_color: Color = (
-						_HELPER_FUNCS.get_color_from_string(
+						_UTILS.get_color_from_string(
 							color_string
 						)
 					)
@@ -1237,7 +1234,7 @@ func _import(
 						light_node.owner = saved_scene_root
 				"spotlight":
 					# Get spotlight position.
-					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
+					var pos: Vector3 = _UTILS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1250,7 +1247,7 @@ func _import(
 					# Get spotlight color string.
 					var color_string = source.get_pascal_string()
 					var actual_color: Color = (
-						_HELPER_FUNCS.get_color_from_string(
+						_UTILS.get_color_from_string(
 							color_string
 						)
 					)
@@ -1261,7 +1258,7 @@ func _import(
 					# Get spotlight angles string.
 					var angles: String = source.get_pascal_string()
 					var rot: Vector3 = (
-						_HELPER_FUNCS.get_rotation_from_angles(
+						_UTILS.get_rotation_from_angles(
 							angles
 						)
 					)
@@ -1298,7 +1295,7 @@ func _import(
 						spotlight_node.owner = saved_scene_root
 				"soundemitter":
 					# Get sound emitter position.
-					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
+					var pos: Vector3 = _UTILS.get_entity_position(
 						source, scale_mesh
 					)
 					
@@ -1331,14 +1328,14 @@ func _import(
 						emitter_node.owner = saved_scene_root
 				"playerstart":
 					# Get player start position.
-					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
+					var pos: Vector3 = _UTILS.get_entity_position(
 						source, scale_mesh
 					)
 					
 					# Get player start angles string.
 					var angles: String = source.get_pascal_string()
 					var rot: Vector3 = (
-						_HELPER_FUNCS.get_rotation_from_angles(
+						_UTILS.get_rotation_from_angles(
 							angles
 						)
 					)
@@ -1367,17 +1364,17 @@ func _import(
 					var model_path: String = source.get_pascal_string()
 					
 					# Get model position.
-					var pos: Vector3 = _HELPER_FUNCS.get_entity_position(
+					var pos: Vector3 = _UTILS.get_entity_position(
 						source, scale_mesh
 					)
 					
 					# Get model rotation.
-					var rot: Vector3 = _HELPER_FUNCS.get_entity_rotation(
+					var rot: Vector3 = _UTILS.get_entity_rotation(
 						source
 					)
 					
 					# Get model scale.
-					var scale: Vector3 = _HELPER_FUNCS.get_entity_scale(
+					var scale: Vector3 = _UTILS.get_entity_scale(
 						source
 					)
 					

@@ -10,7 +10,6 @@ const _LIGHTMAP_SHADER: Shader = preload(
 		"res://addons/rmesh_import/lightmap.gdshader"
 )
 const _UTILS := preload("res://addons/rmesh_import/utils.gd")
-const _HELPER_FUNCS = preload("res://addons/rmesh_import/helper_funcs.gd")
 
 
 # Fix crash when importing multiple files with threads.
@@ -127,47 +126,39 @@ func _import(
 		source_file: String, save_path: String, options: Dictionary, 
 		platform_variants: Array[String], gen_files: Array[String]
 ) -> Error:
-	var file: FileAccess = FileAccess.open(
-		source_file, FileAccess.READ
-	)
-	if not file:
+	var source: FileAccess = FileAccess.open(source_file, FileAccess.READ)
+	if not is_instance_valid(source):
 		return FileAccess.get_open_error()
 	
 	# Get the header. It's always "RoomMesh".
-	var header: String = file.get_pascal_string()
+	var header := source.get_pascal_string()
 	if not header == "RoomMesh":
 		push_error(
-			"CBRE-EX Mesh import - Header must be \"RoomMesh\","
-			+ " instead is \"" + header + "\"."
+				"CBRE-EX Mesh import - Header must be 'RoomMesh', instead is '"
+				+ header + "'."
 		)
 		return FAILED
 	
-	var scale_mesh: Vector3 = options.get(
-		"mesh/scale_mesh"
-	) as Vector3
+	var scale_mesh: Vector3 = options.get(_UTILS.OPTION_SCALE_MESH)
+	var include_lightmaps: bool = options.get(_UTILS.OPTION_INCLUDE_LIGHTMAPS)
 	
-	var include_lm: bool = options.get(
-		"lightmaps/include_lightmaps"
-	) as bool
-	
-	var saved_scene_root: Node3D = Node3D.new()
+	var saved_scene_root := Node3D.new()
 	var saved_scene_root_name: String = (
-		source_file.get_file()
-		.trim_suffix(".rmesh")
-	) as String
+			source_file.get_file().trim_suffix(".rmesh")
+	)
 	saved_scene_root.name = saved_scene_root_name
 	
 	# Get the texture count.
-	var tex_count: int = file.get_32()
+	var texture_count: int = file.get_32()
 	
 	# We accumulate all the data about the surfaces into this
 	# surface dictionary.
-	var surf_dict: Dictionary = {}
+	var surface_dict: Dictionary = {}
 	
 	# Array of all the textures used in the file. There's only
 	# one of each texture used. Helpful when constructing the
 	# mesh later.
-	var used_tex: PackedStringArray = PackedStringArray()
+	var used_textures: PackedStringArray = PackedStringArray()
 	
 	# Each texture has a set amount of faces associated with it.
 	# In the RMesh file, faces are just stored as a sequence of 
@@ -272,7 +263,7 @@ func _import(
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if not _HELPER_FUNCS.check_tri_ind_count(
+		if not _UTILS.check_tri_ind_count(
 			tri_indices,
 			tri_count
 		):
@@ -282,13 +273,13 @@ func _import(
 		# texture UV and lightmap UV.
 		var vert_ind_pairs: Dictionary = {}
 		if include_lm:
-			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
+			vert_ind_pairs = _UTILS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs, lm_uvs]
 			)
 		else:
-			vert_ind_pairs = _HELPER_FUNCS.create_vert_ind_pairs(
+			vert_ind_pairs = _UTILS.create_vert_ind_pairs(
 				vertices,
 				tri_indices,
 				[tex_uvs]
@@ -360,7 +351,7 @@ func _import(
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if not _HELPER_FUNCS.check_tri_ind_count(
+		if not _UTILS.check_tri_ind_count(
 			invis_coll_tri_indices,
 			invis_coll_tri_count
 		):
@@ -369,7 +360,7 @@ func _import(
 		# For each invisible collision indice, give it
 		# it's corresponding vertice.
 		var invis_coll_vert_ind_pairs: Dictionary = (
-			_HELPER_FUNCS.create_vert_ind_pairs(
+			_UTILS.create_vert_ind_pairs(
 				invis_coll_vertices,
 				invis_coll_tri_indices
 			)

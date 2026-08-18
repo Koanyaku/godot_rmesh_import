@@ -19,25 +19,31 @@ var _scp_cb_mesh_import_plugin: EditorImportPlugin = null
 var _cbre_ex_scene_import_plugin: EditorImportPlugin = null
 var _cbre_ex_mesh_import_plugin: EditorImportPlugin = null
 
+
 func _enter_tree():
-	_scp_cb_scene_import_plugin = _SCP_CB_SCENE_IMPORT_PLUGIN.new()
-	_scp_cb_mesh_import_plugin = _SCP_CB_MESH_IMPORT_PLUGIN.new()
-	add_import_plugin(_scp_cb_scene_import_plugin)
-	add_import_plugin(_scp_cb_mesh_import_plugin)
+	#_scp_cb_scene_import_plugin = _SCP_CB_SCENE_IMPORT_PLUGIN.new()
+	#add_import_plugin(_scp_cb_scene_import_plugin)
+	#
+	#_scp_cb_mesh_import_plugin = _SCP_CB_MESH_IMPORT_PLUGIN.new()
+	#add_import_plugin(_scp_cb_mesh_import_plugin)
 	
 	_cbre_ex_scene_import_plugin = _CBRE_EX_SCENE_IMPORT_PLUGIN.new()
-	_cbre_ex_mesh_import_plugin = _CBRE_EX_MESH_IMPORT_PLUGIN.new()
 	add_import_plugin(_cbre_ex_scene_import_plugin)
-	add_import_plugin(_cbre_ex_mesh_import_plugin)
+	
+	#_cbre_ex_mesh_import_plugin = _CBRE_EX_MESH_IMPORT_PLUGIN.new()
+	#add_import_plugin(_cbre_ex_mesh_import_plugin)
 	
 
+
 func _exit_tree():
-	remove_import_plugin(_scp_cb_scene_import_plugin)
-	remove_import_plugin(_scp_cb_mesh_import_plugin)
-	_scp_cb_scene_import_plugin = null
-	_scp_cb_mesh_import_plugin = null
+	#remove_import_plugin(_scp_cb_scene_import_plugin)
+	#_scp_cb_scene_import_plugin = null
+	#
+	#remove_import_plugin(_scp_cb_mesh_import_plugin)
+	#_scp_cb_mesh_import_plugin = null
 	
 	remove_import_plugin(_cbre_ex_scene_import_plugin)
-	remove_import_plugin(_cbre_ex_mesh_import_plugin)
 	_cbre_ex_scene_import_plugin = null
-	_cbre_ex_mesh_import_plugin = null
+	
+	#remove_import_plugin(_cbre_ex_mesh_import_plugin)
+	#_cbre_ex_mesh_import_plugin = null
