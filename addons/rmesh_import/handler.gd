@@ -1,33 +1,43 @@
 @tool
 extends EditorPlugin
 
-var scp_cb_scene_import_plugin: EditorImportPlugin
-var scp_cb_mesh_import_plugin: EditorImportPlugin
-var cbre_ex_scene_import_plugin: EditorImportPlugin
-var cbre_ex_mesh_import_plugin: EditorImportPlugin
+const _SCP_CB_SCENE_IMPORT_PLUGIN = preload(
+		"res://addons/rmesh_import/scp_cb/scene.gd"
+)
+const _SCP_CB_MESH_IMPORT_PLUGIN = preload(
+		"res://addons/rmesh_import/scp_cb/mesh.gd"
+)
+const _CBRE_EX_SCENE_IMPORT_PLUGIN = preload(
+		"res://addons/rmesh_import/cbre_ex/scene.gd"
+)
+const _CBRE_EX_MESH_IMPORT_PLUGIN = preload(
+		"res://addons/rmesh_import/cbre_ex/mesh.gd"
+)
+
+var _scp_cb_scene_import_plugin: EditorImportPlugin = null
+var _scp_cb_mesh_import_plugin: EditorImportPlugin = null
+var _cbre_ex_scene_import_plugin: EditorImportPlugin = null
+var _cbre_ex_mesh_import_plugin: EditorImportPlugin = null
 
 func _enter_tree():
-	scp_cb_scene_import_plugin = preload("res://addons/rmesh_import/scp_cb_scene.gd").new()
-	add_import_plugin(scp_cb_scene_import_plugin)
+	_scp_cb_scene_import_plugin = _SCP_CB_SCENE_IMPORT_PLUGIN.new()
+	_scp_cb_mesh_import_plugin = _SCP_CB_MESH_IMPORT_PLUGIN.new()
+	add_import_plugin(_scp_cb_scene_import_plugin)
+	add_import_plugin(_scp_cb_mesh_import_plugin)
 	
-	scp_cb_mesh_import_plugin = preload("res://addons/rmesh_import/scp_cb_mesh.gd").new()
-	add_import_plugin(scp_cb_mesh_import_plugin)
+	_cbre_ex_scene_import_plugin = _CBRE_EX_SCENE_IMPORT_PLUGIN.new()
+	_cbre_ex_mesh_import_plugin = _CBRE_EX_MESH_IMPORT_PLUGIN.new()
+	add_import_plugin(_cbre_ex_scene_import_plugin)
+	add_import_plugin(_cbre_ex_mesh_import_plugin)
 	
-	cbre_ex_scene_import_plugin = preload("res://addons/rmesh_import/cbre_ex_scene.gd").new()
-	add_import_plugin(cbre_ex_scene_import_plugin)
-	
-	cbre_ex_mesh_import_plugin = preload("res://addons/rmesh_import/cbre_ex_mesh.gd").new()
-	add_import_plugin(cbre_ex_mesh_import_plugin)
 
 func _exit_tree():
-	remove_import_plugin(scp_cb_scene_import_plugin)
-	scp_cb_scene_import_plugin = null
+	remove_import_plugin(_scp_cb_scene_import_plugin)
+	remove_import_plugin(_scp_cb_mesh_import_plugin)
+	_scp_cb_scene_import_plugin = null
+	_scp_cb_mesh_import_plugin = null
 	
-	remove_import_plugin(scp_cb_mesh_import_plugin)
-	scp_cb_mesh_import_plugin = null
-	
-	remove_import_plugin(cbre_ex_scene_import_plugin)
-	cbre_ex_scene_import_plugin = null
-	
-	remove_import_plugin(cbre_ex_mesh_import_plugin)
-	cbre_ex_mesh_import_plugin = null
+	remove_import_plugin(_cbre_ex_scene_import_plugin)
+	remove_import_plugin(_cbre_ex_mesh_import_plugin)
+	_cbre_ex_scene_import_plugin = null
+	_cbre_ex_mesh_import_plugin = null
