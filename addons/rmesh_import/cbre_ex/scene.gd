@@ -281,16 +281,13 @@ func _import(
 		if not used_textures.has(texture_name):
 			used_textures.push_back(texture_name)
 		
-		# Get the vertex count.
 		var vertex_count: int = source.get_32()
 		
-		# Initialize arrays for texture and lightmap UVs.
-		var tex_uvs := PackedVector2Array()
-		var lm_uvs := PackedVector2Array()
-		
-		# Get the vertices.
-		var vertices := PackedVector3Array()
+		var vertices: Array[_UTILS.Vertex] = []
 		for j in vertex_count:
+			var vertex := _UTILS.Vertex.new()
+			vertices.push_back(vertex)
+			
 			# The data for each vertex takes up 31 bytes.
 			var vertex_data: PackedByteArray = source.get_buffer(31)
 			
@@ -310,18 +307,20 @@ func _import(
 			# In CBRE-EX, the positive 'Y' axis (Godot's positive Z axis) is 
 			# in the opposite direction to Godot's positive Z axis, so we have
 			# to flip it here.
-			vertices.push_back(Vector3(pos_x, pos_y, -pos_z) * scale_mesh)
+			vertex.position = Vector3(pos_x, pos_y, -pos_z) * scale_mesh
 			
 			# Get the texture and lightmap UVs.
-			var tex_u = vertex_data.decode_float(12)
-			var tex_v = vertex_data.decode_float(16)
-			var lm_u = vertex_data.decode_float(20)
-			var lm_v = vertex_data.decode_float(24)
+			var texture_u = vertex_data.decode_float(12)
+			var texture_v = vertex_data.decode_float(16)
+			vertex.texture_uv = Vector2(texture_u, texture_v)
 			
-			tex_uvs.push_back(Vector2(tex_u, tex_v))
 			# We don't care about lightmap UVs if we don't include lightmaps.
-			if include_lightmaps:
-				lm_uvs.push_back(Vector2(lm_u, lm_v))
+			if not include_lightmaps:
+				continue
+			
+			var lightmap_u = vertex_data.decode_float(20)
+			var lightmap_v = vertex_data.decode_float(24)
+			vertex.lightmap_uv = Vector2(lightmap_u, lightmap_v)
 			
 			# The data for each vertex ends with three
 			# 'RGB' bytes. Usually, they are just three FF bytes.
@@ -340,17 +339,11 @@ func _import(
 		):
 			return FAILED
 		
-		# For each indice, give it it's corresponding vertice,
-		# texture UV and lightmap UV.
-		var vert_ind_pairs := Dictionary()
-		if include_lightmaps:
-			vert_ind_pairs = _UTILS.create_vert_ind_pairs(
-					vertices, triangle_indices, [tex_uvs, lm_uvs]
-			)
-		else:
-			vert_ind_pairs = _UTILS.create_vert_ind_pairs(
-					vertices, triangle_indices, [tex_uvs]
-			)
+		# Create indice-vertice pairs for each unique indice.
+		var vert_ind_pairs: Array[_UTILS.Vertex] = []
+		vert_ind_pairs = _UTILS.create_indice_vertice_pairs(
+				vertices, triangle_indices
+		)
 		
 		# Check if the vertice-indice pairs creation
 		# process succeeded.
@@ -424,8 +417,8 @@ func _import(
 			
 			# For each invisible collision indice, give it it's corresponding 
 			# vertice.
-			var invis_coll_vert_ind_pairs := Dictionary(
-					_UTILS.create_vert_ind_pairs(
+			var invis_coll_vert_ind_pairs: Array[_UTILS.Vertex] = (
+					_UTILS.create_indice_vertice_pairs(
 							invis_coll_vertices, invis_coll_triangle_indices
 					)
 			)
@@ -457,13 +450,8 @@ func _import(
 	var array_mesh := ArrayMesh.new()
 	var surface_tool := SurfaceTool.new()
 	
-	var mat_path: String = options.get(
-		"materials/material_path"
-	) as String
-	
-	var lm_path: String = options.get(
-		"lightmaps/lightmap_path"
-	) as String
+	var material_path: String = options.get(_UTILS.OPTION_MATERIAL_PATH)
+	var lightmap_path: String = options.get(_UTILS.OPTION_LIGHTMAP_PATH)
 	
 	# Mesh construction.
 	if not include_lightmaps:
@@ -479,12 +467,12 @@ func _import(
 				if lmd.has(curr_tex):
 					var td: Dictionary = lmd.get(curr_tex)
 					var indices: PackedInt32Array = td.get("indices")
-					var pairs: Dictionary = td.get("pairs")
+					var pairs: Array[_UTILS.Vertex] = td.get("pairs")
 					
 					for i in indices:
-						var pairs_ind: Array = pairs.get(i)
+						var pairs_ind: _UTILS.Vertex = pairs.get(i)
 						
-						surface_tool.set_uv(pairs_ind[1])
+						surface_tool.set_uv(pairs_ind.texture_uv)
 						
 						# Set the material.
 						if (
@@ -492,8 +480,8 @@ func _import(
 							and not curr_loaded_mat
 						):
 							# Fix up material path so it works.
-							var n_mat_path: String = mat_path
-							if mat_path == "":
+							var n_mat_path: String = material_path
+							if material_path == "":
 								n_mat_path += source_file.get_base_dir() + "/"
 							if not n_mat_path.right(1) == "/":
 								n_mat_path += "/"
@@ -519,7 +507,7 @@ func _import(
 						if curr_loaded_mat:
 							surface_tool.set_material(curr_loaded_mat)
 						
-						surface_tool.add_vertex(pairs_ind[0])
+						surface_tool.add_vertex(pairs_ind.position)
 			
 			surface_tool.generate_normals()
 			surface_tool.commit(array_mesh)
@@ -548,32 +536,30 @@ func _import(
 		
 		var lm_index = 1
 		for lm in surface_data:
-			var lmd: Dictionary = surface_data.get(
-				lm
-			) as Dictionary
+			var lmd: Dictionary = surface_data.get(lm)
+			#print(lmd)
+			#return 0
 			for tex: String in lmd:
 				var lm_mat: ShaderMaterial = null
 				
 				surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 				var td: Dictionary = lmd.get(tex)
 				var indices: PackedInt32Array = td.get("indices")
-				var pairs: Dictionary = td.get("pairs")
+				var pairs: Array[_UTILS.Vertex] = td.get("pairs")
 				
 				for i in indices:
-					var pairs_ind: Array = pairs.get(
-						i
-					) as Array
+					var pairs_ind: _UTILS.Vertex = pairs.get(i)
 					
-					surface_tool.set_uv(pairs_ind[1])
-					surface_tool.set_uv2(pairs_ind[2])
+					surface_tool.set_uv(pairs_ind.texture_uv)
+					surface_tool.set_uv2(pairs_ind.lightmap_uv)
 					
 					if (
 						not curr_mat_checked 
 						and not curr_loaded_mat
 					):
 						# Fix up material path so it works.
-						var n_mat_path: String = mat_path
-						if mat_path == "":
+						var n_mat_path: String = material_path
+						if material_path == "":
 							n_mat_path += source_file.get_base_dir() + "/"
 						if not n_mat_path.right(1) == "/":
 							n_mat_path += "/"
@@ -605,14 +591,14 @@ func _import(
 							# they will be read from the RMesh
 							# file's directory.
 							var new_lm_tex_path: String = ""
-							if lm_path == "":
+							if lightmap_path == "":
 								new_lm_tex_path = (
 									source_file.get_base_dir()
 									+ "/" + lm
 								)
 							else:
 								new_lm_tex_path = (
-									lm_path + "/" + lm
+									lightmap_path + "/" + lm
 								)
 							
 							# If we don't have a lightmap texture
@@ -711,7 +697,7 @@ func _import(
 						# it the normal material, if we have one.
 						surface_tool.set_material(curr_loaded_mat)
 					
-					surface_tool.add_vertex(pairs_ind[0])
+					surface_tool.add_vertex(pairs_ind.position)
 				
 				surface_tool.generate_normals()
 				surface_tool.commit(array_mesh)
