@@ -2,15 +2,14 @@
 @tool
 extends EditorImportPlugin
 
-enum PRESETS { DEFAULT }
+enum PRESETS {
+	DEFAULT
+}
 
-const LIGHTMAP_SHADER: Shader = preload(
-	"res://addons/rmesh_import/lightmap.gdshader"
+const _LIGHTMAP_SHADER: Shader = preload(
+		"res://addons/rmesh_import/lightmap.gdshader"
 )
-
-var helper_funcs = preload(
-	"res://addons/rmesh_import/helper_funcs.gd"
-).new()
+const _UTILS := preload("res://addons/rmesh_import/utils.gd")
 
 
 # Fix crash when importing multiple files with threads.
@@ -47,7 +46,7 @@ func _get_preset_count():
 	return PRESETS.size()
 
 
-func _get_preset_name(preset_index) -> String:
+func _get_preset_name(preset_index: int) -> String:
 	match preset_index:
 		PRESETS.DEFAULT:
 			return "Default"
@@ -59,97 +58,162 @@ func _get_import_order() -> ImportOrder:
 	return IMPORT_ORDER_DEFAULT
 
 
-func _get_import_options(path, preset_index) -> Array[Dictionary]:
-	match preset_index:
-		PRESETS.DEFAULT:
-			return [
-				{
-					"name": "mesh/scale_mesh",
-					"default_value": Vector3(1,1,1),
-					"property_hint": PROPERTY_HINT_LINK,
-				},
-				{
-					"name": "lightmaps/include_lightmaps",
-					"default_value": false,
-				},
-				{
-					"name": "lightmaps/light_multiplier",
-					"default_value": 1.0,
-					"property_hint": PROPERTY_HINT_RANGE,
-					"hint_string": "0,0,0.001,or_greater,hide_slider",
-				},
-				{
-					"name": "lightmaps/lightmap_path",
-					"default_value": "",
-					"property_hint": PROPERTY_HINT_DIR,
-				},
-				{
-					"name": "collision/generate_collision_mesh",
-					"default_value": false,
-				},
-				{
-					"name": "collision/include_invisible_collisions",
-					"default_value": true,
-				},
-				{
-					"name": "collision/split_collision_mesh",
-					"default_value": false,
-				},
-				{
-					"name": "materials/material_path",
-					"default_value": "",
-					"property_hint": PROPERTY_HINT_DIR,
-				},
-				{
-					"name": "entities/include_entities",
-					"default_value": true,
-				},
-				{
-					"name": "entities/lights/include_lights",
-					"default_value": true,
-				},
-				{
-					"name": "entities/lights/light_range_scale",
-					"default_value": 1.0,
-				},
-				{
-					"name": "entities/waypoints/include_waypoints",
-					"default_value": true,
-				},
-				{
-					"name": "entities/sound_emitters/include_sound_emitters",
-					"default_value": true,
-				},
-				{
-					"name": "entities/sound_emitters/sound_range_scale",
-					"default_value": 1.0,
-				},
-				{
-					"name": "entities/models/include_models",
-					"default_value": true,
-				},
-				{
-					"name": "entities/screens/include_screens",
-					"default_value": true,
-				},
-			]
-		_:
-			return []
+func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]:
+	var options: Array[Dictionary] = []
+	
+	# The options here have been ordered from what I thought the user would
+	# find the most important to the least important.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_SCALE_MESH,
+			"default_value": Vector3(1, 1, 1),
+			"property_hint": PROPERTY_HINT_LINK,
+	})
+	
+	# Materials.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_MATERIAL_PATH,
+			"default_value": "",
+			"property_hint": PROPERTY_HINT_DIR,
+	})
+	
+	# Lightmaps.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_LIGHTMAPS,
+			"default_value": false,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			)
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHT_MULTIPLIER,
+			"default_value": 1.0,
+			"property_hint": PROPERTY_HINT_RANGE,
+			"hint_string": "0, 0, 0.001, or_greater, hide_slider",
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHTMAP_PATH,
+			"default_value": "",
+			"property_hint": PROPERTY_HINT_DIR,
+	})
+	
+	# Collisions.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_GENERATE_COLLISION_MESH,
+			"default_value": false,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			)
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_SPLIT_COLLISION_MESH,
+			"default_value": false,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_INVISIBLE_COLLISIONS,
+			"default_value": true
+	})
+	
+	# Entities.
+	
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_ENTITIES,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			)
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_LIGHTS,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			)
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_LIGHT_RANGE_SCALE,
+			"default_value": 1.0,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_MODELS,
+			"default_value": true,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_WAYPOINTS,
+			"default_value": true,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_SOUND_EMITTERS,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			)
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_SOUND_RANGE_SCALE,
+			"default_value": 1.0,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_INCLUDE_SCREENS,
+			"default_value": true,
+	})
+	
+	return options
 
 
-func _get_option_visibility(path: String, option_name: StringName, options: Dictionary) -> bool:
+func _get_option_visibility(
+		path: String, option_name: StringName, options: Dictionary
+) -> bool:
+	if (
+			option_name == _UTILS.OPTION_LIGHT_MULTIPLIER
+			or option_name == _UTILS.OPTION_LIGHTMAP_PATH
+	):
+		return options.get(_UTILS.OPTION_INCLUDE_LIGHTMAPS)
+	
+	if (
+			option_name == _UTILS.OPTION_SPLIT_COLLISION_MESH
+			or option_name == _UTILS.OPTION_INCLUDE_INVISIBLE_COLLISIONS
+	):
+		return options.get(_UTILS.OPTION_GENERATE_COLLISION_MESH)
+	
+	if options.get(_UTILS.OPTION_INCLUDE_ENTITIES):
+		match option_name:
+			_UTILS.OPTION_LIGHT_RANGE_SCALE:
+				return options.get(_UTILS.OPTION_INCLUDE_LIGHTS)
+			_UTILS.OPTION_SOUND_RANGE_SCALE:
+				return options.get(_UTILS.OPTION_INCLUDE_SOUND_EMITTERS)
+	elif (
+			option_name == _UTILS.OPTION_INCLUDE_LIGHTS
+			or option_name == _UTILS.OPTION_LIGHT_RANGE_SCALE
+			or option_name == _UTILS.OPTION_INCLUDE_MODELS
+			or option_name == _UTILS.OPTION_INCLUDE_WAYPOINTS
+			or option_name == _UTILS.OPTION_INCLUDE_SOUND_EMITTERS
+			or option_name == _UTILS.OPTION_SOUND_RANGE_SCALE
+			or option_name == _UTILS.OPTION_INCLUDE_SCREENS
+	):
+		return options.get(_UTILS.OPTION_INCLUDE_ENTITIES)
+	
 	return true
 
 
-func _import(source_file: String, save_path: String, options: Dictionary, platform_variants: Array[String], gen_files: Array[String]) -> Error:
-	var file: FileAccess = FileAccess.open(
-		source_file, FileAccess.READ
-	)
-	if not file:
+func _import(
+		source_file: String, save_path: String, options: Dictionary, 
+		platform_variants: Array[String], gen_files: Array[String]
+) -> Error:
+	var source: FileAccess = FileAccess.open(source_file, FileAccess.READ)
+	if not is_instance_valid(source):
 		return FileAccess.get_open_error()
 	
 	# Get the header. It's always "RoomMesh".
-	var header: String = file.get_pascal_string()
+	var header := source.get_pascal_string()
 	if not header == "RoomMesh":
 		push_error(
 			"CBRE-EX Scene import - Header must be \"RoomMesh\","
@@ -157,192 +221,159 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		)
 		return FAILED
 	
-	var scale_mesh: Vector3 = options.get(
-		"mesh/scale_mesh"
-	) as Vector3
+	var scale_mesh: Vector3 = options.get(_UTILS.OPTION_SCALE_MESH)
+	var include_lightmaps: bool = options.get(_UTILS.OPTION_INCLUDE_LIGHTMAPS)
 	
-	var include_lm: bool = options.get(
-		"lightmaps/include_lightmaps"
-	) as bool
-	
-	var saved_scene_root: Node3D = Node3D.new()
+	var saved_scene_root := Node3D.new()
 	var saved_scene_root_name: String = (
-		source_file.get_file()
-		.trim_suffix(".rmesh")
+			source_file.get_file().trim_suffix(".rmesh")
 	)
 	saved_scene_root.name = saved_scene_root_name
 	
 	# Get the texture count.
-	var tex_count: int = file.get_32()
+	var texture_count: int = source.get_32()
 	
-	# We accumulate all the data about the surfaces into this
-	# surface dictionary.
-	var surf_dict: Dictionary = {}
+	# We accumulate all the data about the surfaces into this surface 
+	# dictionary.
+	var surface_data: Dictionary[String, Dictionary] = {}
 	
-	# Array of all the textures used in the file. There's only
-	# one of each texture used. Helpful when constructing the
-	# mesh later.
-	var used_tex: PackedStringArray = PackedStringArray()
+	# Array of all the textures used in the file. There's only one of each 
+	# texture used. Helpful when constructing the mesh later.
+	var used_textures := PackedStringArray()
 	
 	# Each texture has a set amount of faces associated with it.
-	# In the RMesh file, faces are just stored as a sequence of 
-	# vertices for each texture.
-	for i in tex_count:
-		var lm_flag: int = file.get_8()
-		var lm_name: String = ""
-		# If the lightmap flag is 0, a lightmap isn't 
-		# generated for this texture.
-		if lm_flag == 1:
-			lm_name = file.get_pascal_string()
+	# In the RMesh file, faces are just stored as a sequence of vertices for 
+	# each texture.
+	for i in texture_count:
+		var lightmap_flag: int = source.get_8()
+		var lightmap_name := ""
+		# If the lightmap flag is 0, a lightmap isn't generated for this 
+		# texture.
+		if lightmap_flag == 1:
+			lightmap_name = source.get_pascal_string()
 		
-		# If the texture flag is 3, the texture is 
-		# without a lightmap.
-		var tex_flag = file.get_8()
-		# If the texture flag is 3, then in CBRE-EX RMesh
-		# files, the lightmap flag must always be 0.
-		if tex_flag == 3 and not lm_flag == 0:
+		# If the texture flag is 3, the texture is without a lightmap.
+		var texture_flag = source.get_8()
+		# If the texture flag is 3, then in CBRE-EX RMesh files, the lightmap 
+		# flag must always be 0.
+		if texture_flag == 3 and not lightmap_flag == 0:
 			push_error(
-				"CBRE-EX Scene import - Texture flag is 3"
-				+ ", but lightmap flag is not 0."
+					"CBRE-EX Scene import - Texture flag is 3, but lightmap "
+					+ "flag is not 0."
 			)
 			return FAILED
 		
 		# Get the texture name.
-		var tex_name: String = file.get_pascal_string()
+		var texture_name: String = source.get_pascal_string()
 		
-		# Add the lightmap name as a dictionary to the
-		# surface dictionary if it was not yet added.
-		if not surf_dict.has(lm_name):
-			surf_dict[lm_name] = {}
+		# Add the lightmap name as a dictionary to the surface dictionary if 
+		# it was not yet added.
+		if not surface_data.has(lightmap_name):
+			surface_data[lightmap_name] = {}
 		
-		# Add the texture name to the lightmap name dictionary
-		# as a dictionary if it was not yet added.
-		if not surf_dict.get(lm_name).has(tex_name):
-			surf_dict.get(lm_name)[tex_name] = {}
-		
-		# Add the texture name to the list of used textures
+		# Add the texture name to the lightmap name dictionary as a dictionary 
 		# if it was not yet added.
-		if not used_tex.has(tex_name):
-			used_tex.append(tex_name)
+		if not surface_data.get(lightmap_name).has(texture_name):
+			surface_data.get(lightmap_name)[texture_name] = {}
 		
-		# Get the vertex count.
-		var vertex_count: int = file.get_32()
+		# Add the texture name to the list of used textures if it was not yet 
+		# added.
+		if not used_textures.has(texture_name):
+			used_textures.push_back(texture_name)
 		
-		# Initialize arrays for texture and lightmap UVs.
-		var tex_uvs: PackedVector2Array = PackedVector2Array()
-		var lm_uvs: PackedVector2Array = PackedVector2Array()
+		var vertex_count: int = source.get_32()
 		
-		# Get the vertices.
-		var vertices: PackedVector3Array = PackedVector3Array()
+		var vertices: Array[_UTILS.Vertex] = []
 		for j in vertex_count:
+			var vertex := _UTILS.Vertex.new()
+			vertices.push_back(vertex)
+			
 			# The data for each vertex takes up 31 bytes.
-			var vertex_data: PackedByteArray = file.get_buffer(31)
+			var vertex_data: PackedByteArray = source.get_buffer(31)
 			
 			# Each vertex X, Y and Z position takes up 4 bytes.
-			# In CBRE-EX, X and Y are horizontal positions, 
-			# while Z is vertical. This means that a vertex 
-			# location is technically X Z Y. This is how they
-			# are stored in the file, however, in Godot, X and Z
-			# are horizontal, while Y is vertical.
+			# In CBRE-EX, X and Y are horizontal positions, while Z is vertical.
+			# This means that a vertex location is technically X Z Y. 
+			# This is how they are stored in the file, however, in Godot, 
+			# X and Z are horizontal, while Y is vertical.
 			
 			# CBRE-EX 'X' position
-			var pos_x: float = vertex_data.decode_float(0)
+			var pos_x := vertex_data.decode_float(0)
 			# CBRE-EX 'Z' position
-			var pos_y: float = vertex_data.decode_float(4)
+			var pos_y := vertex_data.decode_float(4)
 			# CBRE-EX 'Y' position
-			var pos_z: float = vertex_data.decode_float(8)
+			var pos_z := vertex_data.decode_float(8)
 			
-			# In CBRE-EX, the positive 'Y' axis 
-			# (Godot's positive Z axis) is in the opposite direction
-			# to Godot's positive Z axis, so we have to flip it here.
-			vertices.append(
-				Vector3(pos_x, pos_y, -pos_z)
-				* scale_mesh
-			)
+			# In CBRE-EX, the positive 'Y' axis (Godot's positive Z axis) is 
+			# in the opposite direction to Godot's positive Z axis, so we have
+			# to flip it here.
+			vertex.position = Vector3(pos_x, pos_y, -pos_z) * scale_mesh
 			
 			# Get the texture and lightmap UVs.
-			var tex_u = vertex_data.decode_float(12)
-			var tex_v = vertex_data.decode_float(16)
-			var lm_u = vertex_data.decode_float(20)
-			var lm_v = vertex_data.decode_float(24)
+			var texture_u = vertex_data.decode_float(12)
+			var texture_v = vertex_data.decode_float(16)
+			vertex.texture_uv = Vector2(texture_u, texture_v)
 			
-			tex_uvs.append(Vector2(tex_u, tex_v))
-			# We don't care about lightmap UVs if we don't
-			# include lightmaps.
-			if include_lm:
-				lm_uvs.append(Vector2(lm_u, lm_v))
+			# We don't care about lightmap UVs if we don't include lightmaps.
+			if not include_lightmaps:
+				continue
+			
+			var lightmap_u = vertex_data.decode_float(20)
+			var lightmap_v = vertex_data.decode_float(24)
+			vertex.lightmap_uv = Vector2(lightmap_u, lightmap_v)
 			
 			# The data for each vertex ends with three
 			# 'RGB' bytes. Usually, they are just three FF bytes.
 			# We don't really care about these.
 		
-		# Get the triangle count.
-		var tri_count: int = file.get_32()
-		
-		# Get the triangle indices.
-		var tri_indices: PackedInt32Array = PackedInt32Array()
-		for j in tri_count * 3:
+		var triangle_count: int = source.get_32()
+		var triangle_indices := PackedInt32Array()
+		for j in triangle_count * 3:
 			# Each indice is stored as 4 bytes.
-			tri_indices.append(file.get_32())
+			triangle_indices.push_back(source.get_32())
 		
 		# The triangle indice count must be a multiple
 		# of the triangle count.
-		if not helper_funcs.check_tri_ind_count(
-			tri_indices,
-			tri_count
+		if not _UTILS.check_tri_ind_count(
+				triangle_indices, triangle_count
 		):
 			return FAILED
 		
-		# For each indice, give it it's corresponding vertice,
-		# texture UV and lightmap UV.
-		var vert_ind_pairs: Dictionary = {}
-		if include_lm:
-			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
-				vertices,
-				tri_indices,
-				[tex_uvs, lm_uvs]
-			)
-		else:
-			vert_ind_pairs = helper_funcs.create_vert_ind_pairs(
-				vertices,
-				tri_indices,
-				[tex_uvs]
-			)
+		# Create indice-vertice pairs for each unique indice.
+		var vert_ind_pairs: Array[_UTILS.Vertex] = []
+		vert_ind_pairs = _UTILS.create_indice_vertice_pairs(
+				vertices, triangle_indices
+		)
 		
 		# Check if the vertice-indice pairs creation
 		# process succeeded.
 		if vert_ind_pairs.is_empty():
 			return FAILED
 		
-		surf_dict.get(lm_name).get(tex_name)[
-			"indices"
-		] = tri_indices
-		surf_dict.get(lm_name).get(tex_name)[
-			"pairs"
-		] = vert_ind_pairs
+		surface_data.get(lightmap_name).get(texture_name)["indices"] = (
+				triangle_indices
+		)
+		surface_data.get(lightmap_name).get(texture_name)["pairs"] = (
+				vert_ind_pairs
+		)
 	
-	var has_invis_coll: bool = file.get_32() as bool
+	var has_invis_coll: bool = source.get_32()
 	
 	var include_invis_coll: bool = options.get(
-		"collision/include_invisible_collisions"
-	) as bool
+			_UTILS.OPTION_INCLUDE_INVISIBLE_COLLISIONS
+	)
+	var generate_coll: bool = options.get(_UTILS.OPTION_GENERATE_COLLISION_MESH)
 	
-	var generate_coll: bool = options.get(
-		"collision/generate_collision_mesh"
-	) as bool
-	
-	# Handle invisible collisions. We mostly have to repeat 
-	# the same processes as with the normal face data.
+	# Handle invisible collisions. We mostly have to repeat the same processes 
+	# as with the normal face data.
 	var invis_coll_arr: Array[Dictionary] = []
 	
 	if has_invis_coll:
 		if generate_coll and include_invis_coll:
-			var invis_coll_vert_count: int = file.get_32()
+			var invis_coll_vert_count: int = source.get_32()
 			
 			# Get the invisible collision vertices.
-			var invis_coll_vertices: PackedVector3Array = (
-				PackedVector3Array()
-			)
+			var invis_coll_vertices := PackedVector3Array()
 			for i in invis_coll_vert_count:
 				# The actual data for each invisible collision vertex
 				# takes up 12 bytes. Only the X, Y and Z positions get
@@ -350,115 +381,98 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				# that, we do mostly the same things as with normal
 				# face vertices.
 				var invis_coll_vertex_data: PackedByteArray = (
-					file.get_buffer(12)
+						source.get_buffer(12)
 				)
 				
 				# CBRE-EX 'X' position
-				var pos_x: float = invis_coll_vertex_data.decode_float(0)
+				var pos_x := invis_coll_vertex_data.decode_float(0)
 				# CBRE-EX 'Z' position 
-				var pos_y: float = invis_coll_vertex_data.decode_float(4)
+				var pos_y := invis_coll_vertex_data.decode_float(4)
 				# CBRE-EX 'Y' position
-				var pos_z: float = invis_coll_vertex_data.decode_float(8)
-				invis_coll_vertices.append(
-					Vector3(pos_x, pos_y, -pos_z)
-					* scale_mesh
+				var pos_z := invis_coll_vertex_data.decode_float(8)
+				
+				invis_coll_vertices.push_back(
+						Vector3(pos_x, pos_y, -pos_z) * scale_mesh
 				)
 				
-				# The data for each invisible collision vertex
-				# doesn't end with any extra bytes.
+				# The data for each invisible collision vertex doesn't end with 
+				# any extra bytes.
 			
 			# Get the invisible collision triangle count.
-			var invis_coll_tri_count: int = file.get_32()
+			var invis_coll_tri_count: int = source.get_32()
 			
 			# Get the invisible collision triangle indices.
-			var invis_coll_tri_indices: PackedInt32Array = (
-				PackedInt32Array()
-			)
+			var invis_coll_triangle_indices := PackedInt32Array()
 			for i in invis_coll_tri_count * 3:
 				# Each indice is stored as 4 bytes.
-				invis_coll_tri_indices.append(file.get_32())
+				invis_coll_triangle_indices.append(source.get_32())
 			
-			# The triangle indice count must be a multiple
-			# of the triangle count.
-			if not helper_funcs.check_tri_ind_count(
-				invis_coll_tri_indices,
-				invis_coll_tri_count
+			# The triangle indice count must be a multiple of the triangle 
+			# count.
+			if not _UTILS.check_tri_ind_count(
+					invis_coll_triangle_indices,
+					invis_coll_tri_count
 			):
 				return FAILED
 			
-			# For each invisible collision indice, give it
-			# it's corresponding vertice.
-			var invis_coll_vert_ind_pairs: Dictionary = (
-				helper_funcs.create_vert_ind_pairs(
-					invis_coll_vertices,
-					invis_coll_tri_indices
-				)
+			# For each invisible collision indice, give it it's corresponding 
+			# vertice.
+			var invis_coll_vert_ind_pairs: Array[_UTILS.Vertex] = (
+					_UTILS.create_indice_vertice_pairs(
+							invis_coll_vertices, invis_coll_triangle_indices
+					)
 			)
 			
-			# Check if the vertice-indice pairs creation
-			# process succeeded.
+			# Check if the vertice-indice pairs creation process succeeded.
 			if invis_coll_vert_ind_pairs.is_empty():
 				return FAILED
 			
-			invis_coll_arr.append(
-				{
-					"indices": invis_coll_tri_indices,
+			invis_coll_arr.push_back({
+					"indices": invis_coll_triangle_indices,
 					"pairs": invis_coll_vert_ind_pairs
-				}
-			)
+			})
 		else:
-			# If the RMesh has invisible collisions but we choose to
-			# ignore them, we still have to move forward in the file
-			# so that we don't read the wrong data afterwards.
-			var invis_coll_vert_count: int = file.get_32()
+			# If the RMesh has invisible collisions but we choose to ignore 
+			# them, we still have to move forward in the file so that we don't 
+			# read the wrong data afterwards.
+			var invis_coll_vert_count: int = source.get_32()
+			
 			# Skip through all the vertices.
 			for i in invis_coll_vert_count * 3:
-				file.get_32()
+				source.get_32()
+			
 			# Skip through all the indices.
-			var invis_coll_tri_count: int = file.get_32()
+			var invis_coll_tri_count: int = source.get_32()
 			for i in invis_coll_tri_count * 3:
-				file.get_32()
+				source.get_32()
 	
 	# Initialize the ArrayMesh and SurfaceTool.
-	var arr_mesh: ArrayMesh = ArrayMesh.new()
-	var st: SurfaceTool = SurfaceTool.new()
+	var array_mesh := ArrayMesh.new()
+	var surface_tool := SurfaceTool.new()
 	
-	var mat_path: String = options.get(
-		"materials/material_path"
-	) as String
-	
-	var lm_path: String = options.get(
-		"lightmaps/lightmap_path"
-	) as String
+	var material_path: String = options.get(_UTILS.OPTION_MATERIAL_PATH)
+	var lightmap_path: String = options.get(_UTILS.OPTION_LIGHTMAP_PATH)
 	
 	# Mesh construction.
-	if not include_lm:
+	if not include_lightmaps:
 		# If we don't include lightmaps.
 		
 		var curr_mat_checked: bool = false
 		var curr_loaded_mat: Material = null
 		
-		for curr_tex in used_tex:
-			st.begin(Mesh.PRIMITIVE_TRIANGLES)
-			for lm in surf_dict:
-				var lmd: Dictionary = surf_dict.get(
-					lm
-				) as Dictionary
+		for curr_tex in used_textures:
+			surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+			for lm in surface_data:
+				var lmd: Dictionary = surface_data.get(lm)
 				if lmd.has(curr_tex):
-					var td: Dictionary = lmd.get(
-						curr_tex
-					) as Dictionary
-					var indices: PackedInt32Array = td.get(
-						"indices"
-					) as PackedInt32Array
-					var pairs: Dictionary = td.get(
-						"pairs"
-					) as Dictionary
+					var td: Dictionary = lmd.get(curr_tex)
+					var indices: PackedInt32Array = td.get("indices")
+					var pairs: Array[_UTILS.Vertex] = td.get("pairs")
 					
 					for i in indices:
-						var pairs_ind: Array = pairs.get(i) as Array
+						var pairs_ind: _UTILS.Vertex = pairs.get(i)
 						
-						st.set_uv(pairs_ind[1])
+						surface_tool.set_uv(pairs_ind.texture_uv)
 						
 						# Set the material.
 						if (
@@ -466,8 +480,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							and not curr_loaded_mat
 						):
 							# Fix up material path so it works.
-							var n_mat_path: String = mat_path
-							if mat_path == "":
+							var n_mat_path: String = material_path
+							if material_path == "":
 								n_mat_path += source_file.get_base_dir() + "/"
 							if not n_mat_path.right(1) == "/":
 								n_mat_path += "/"
@@ -491,19 +505,19 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						# We then check if we have a material
 						# loaded after that process.
 						if curr_loaded_mat:
-							st.set_material(curr_loaded_mat)
+							surface_tool.set_material(curr_loaded_mat)
 						
-						st.add_vertex(pairs_ind[0])
+						surface_tool.add_vertex(pairs_ind.position)
 			
-			st.generate_normals()
-			st.commit(arr_mesh)
-			st.clear()
+			surface_tool.generate_normals()
+			surface_tool.commit(array_mesh)
+			surface_tool.clear()
 			# WARNING: Textures that are from different
 			# folders but share the same filename will
 			# not be differentiated, and will be treated
 			# as the same texture.
-			arr_mesh.surface_set_name(
-				arr_mesh.get_surface_count() - 1, 
+			array_mesh.surface_set_name(
+				array_mesh.get_surface_count() - 1, 
 				curr_tex.get_file().trim_suffix(
 					curr_tex.get_extension()
 				).rstrip(".")
@@ -521,39 +535,31 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 		var curr_loaded_lm_tex: Texture2D = null
 		
 		var lm_index = 1
-		for lm in surf_dict:
-			var lmd: Dictionary = surf_dict.get(
-				lm
-			) as Dictionary
+		for lm in surface_data:
+			var lmd: Dictionary = surface_data.get(lm)
+			#print(lmd)
+			#return 0
 			for tex: String in lmd:
 				var lm_mat: ShaderMaterial = null
 				
-				st.begin(Mesh.PRIMITIVE_TRIANGLES)
-				var td: Dictionary = lmd.get(
-					tex
-				) as Dictionary
-				var indices: PackedInt32Array = td.get(
-					"indices"
-				) as PackedInt32Array
-				var pairs: Dictionary = td.get(
-					"pairs"
-				) as Dictionary
+				surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+				var td: Dictionary = lmd.get(tex)
+				var indices: PackedInt32Array = td.get("indices")
+				var pairs: Array[_UTILS.Vertex] = td.get("pairs")
 				
 				for i in indices:
-					var pairs_ind: Array = pairs.get(
-						i
-					) as Array
+					var pairs_ind: _UTILS.Vertex = pairs.get(i)
 					
-					st.set_uv(pairs_ind[1])
-					st.set_uv2(pairs_ind[2])
+					surface_tool.set_uv(pairs_ind.texture_uv)
+					surface_tool.set_uv2(pairs_ind.lightmap_uv)
 					
 					if (
 						not curr_mat_checked 
 						and not curr_loaded_mat
 					):
 						# Fix up material path so it works.
-						var n_mat_path: String = mat_path
-						if mat_path == "":
+						var n_mat_path: String = material_path
+						if material_path == "":
 							n_mat_path += source_file.get_base_dir() + "/"
 						if not n_mat_path.right(1) == "/":
 							n_mat_path += "/"
@@ -585,14 +591,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							# they will be read from the RMesh
 							# file's directory.
 							var new_lm_tex_path: String = ""
-							if lm_path == "":
+							if lightmap_path == "":
 								new_lm_tex_path = (
 									source_file.get_base_dir()
 									+ "/" + lm
 								)
 							else:
 								new_lm_tex_path = (
-									lm_path + "/" + lm
+									lightmap_path + "/" + lm
 								)
 							
 							# If we don't have a lightmap texture
@@ -619,7 +625,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							# material with both textures applied.
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
-								lm_mat.shader = LIGHTMAP_SHADER
+								lm_mat.shader = _LIGHTMAP_SHADER
 							
 							if curr_loaded_mat.albedo_texture:
 								lm_mat.set_shader_parameter(
@@ -649,7 +655,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 								)
 							)
 							
-							st.set_material(lm_mat)
+							surface_tool.set_material(lm_mat)
 						elif (
 							curr_loaded_lm_tex
 							and not curr_loaded_mat
@@ -662,7 +668,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							# texture applied.
 							if not lm_mat:
 								lm_mat = ShaderMaterial.new()
-								lm_mat.shader = LIGHTMAP_SHADER
+								lm_mat.shader = _LIGHTMAP_SHADER
 							
 							lm_mat.set_shader_parameter(
 								"texture_lightmap",
@@ -675,7 +681,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 									"lightmaps/light_multiplier"
 								)
 							)
-							st.set_material(lm_mat)
+							surface_tool.set_material(lm_mat)
 						elif (
 							curr_loaded_mat
 							and not curr_loaded_lm_tex
@@ -684,34 +690,34 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 							# associated with it, but we can't
 							# load it, we give it the normal
 							# material, if we have one.
-							st.set_material(curr_loaded_mat)
+							surface_tool.set_material(curr_loaded_mat)
 					elif curr_loaded_mat:
 						# If the surface doesn't have a
 						# lightmap associated with it, we give
 						# it the normal material, if we have one.
-						st.set_material(curr_loaded_mat)
+						surface_tool.set_material(curr_loaded_mat)
 					
-					st.add_vertex(pairs_ind[0])
+					surface_tool.add_vertex(pairs_ind.position)
 				
-				st.generate_normals()
-				st.commit(arr_mesh)
-				st.clear()
+				surface_tool.generate_normals()
+				surface_tool.commit(array_mesh)
+				surface_tool.clear()
 				
 				# WARNING: Textures that are from different
 				# folders but share the same filename will
 				# not be differentiated, and will be treated
 				# as the same texture.
 				if not lm == "none":
-					arr_mesh.surface_set_name(
-						arr_mesh.get_surface_count() - 1,
+					array_mesh.surface_set_name(
+						array_mesh.get_surface_count() - 1,
 						tex.get_file().trim_suffix(
 							tex.get_extension()
 						).rstrip(".")
 						+ "_lm" + str(lm_index)
 					)
 				else:
-					arr_mesh.surface_set_name(
-						arr_mesh.get_surface_count() - 1,
+					array_mesh.surface_set_name(
+						array_mesh.get_surface_count() - 1,
 						tex.get_file().trim_suffix(
 							tex.get_extension()
 						).rstrip(".")
@@ -729,7 +735,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# Add the mesh to the scene as a MeshInstance3D.
 	var arr_mesh_instance: MeshInstance3D = MeshInstance3D.new()
 	arr_mesh_instance.name = saved_scene_root_name
-	arr_mesh_instance.mesh = arr_mesh
+	arr_mesh_instance.mesh = array_mesh
 	saved_scene_root.add_child(arr_mesh_instance)
 	arr_mesh_instance.owner = saved_scene_root
 	
@@ -741,14 +747,14 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			# the mesh due to lightmaps, since with them,
 			# there can be multiple surfaces using the
 			# same texture. 
-			for tex in used_tex:
+			for tex in used_textures:
 				# Get only the texture filename without
 				# the extension.
 				# WARNING: Textures that are from different
 				# folders but share the same filename will
 				# not be differentiated, and will be treated
 				# as the same texture.
-				var tex_name = tex.get_file().trim_suffix(
+				var texture_name = tex.get_file().trim_suffix(
 					tex.get_extension()
 				).rstrip(".")
 				
@@ -756,9 +762,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 				# from all the different surfaces using
 				# the current texture.
 				var surf_arrays: Array[Array] = []
-				for i in arr_mesh.get_surface_count():
+				for i in array_mesh.get_surface_count():
 					var surf_name: String = (
-						arr_mesh.surface_get_name(i)
+						array_mesh.surface_get_name(i)
 					)
 					# Get the surface name's suffix.
 					# Surface names of meshes with lightmaps
@@ -771,7 +777,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						surf_name_suffix.begins_with("lm")
 						and surf_name.trim_suffix(
 							"_" + surf_name_suffix
-						) == tex_name
+						) == texture_name
 					):
 						# We don't care about lightmaps when
 						# getting all the surfaces with a specific
@@ -781,13 +787,13 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						# name the texture name, we add it to
 						# the array.
 						surf_arrays.append(
-							arr_mesh.surface_get_arrays(i)
+							array_mesh.surface_get_arrays(i)
 						)
-					elif surf_name == tex_name:
+					elif surf_name == texture_name:
 						# If the surface name the texture name,
 						# we add it to the array.
 						surf_arrays.append(
-							arr_mesh.surface_get_arrays(i)
+							array_mesh.surface_get_arrays(i)
 						)
 				
 				var new_arr_mesh: ArrayMesh = ArrayMesh.new()
@@ -797,7 +803,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					)
 				
 				var coll_body: StaticBody3D = StaticBody3D.new()
-				var coll_body_name: String = tex_name
+				var coll_body_name: String = texture_name
 				if not coll_body_name.ends_with("_coll"):
 					coll_body_name += "_coll"
 				coll_body.name = coll_body_name
@@ -826,7 +832,7 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			coll_shape.name = "CollisionShape3D"
 			
 			var coll_polygon: ConcavePolygonShape3D = (
-				arr_mesh.create_trimesh_shape()
+				array_mesh.create_trimesh_shape()
 			)
 			coll_shape.shape = coll_polygon
 			
@@ -902,9 +908,9 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 			"entities/sound_emitters/sound_range_scale"
 		) as float
 		
-		var ent_count: int = file.get_32()
+		var ent_count: int = source.get_32()
 		for i in ent_count as int:
-			var ent_name: String = file.get_pascal_string()
+			var ent_name: String = source.get_pascal_string()
 			match(ent_name):
 				"light":
 					# NOTICE: CBRE-EX doesn't distinguish
@@ -913,26 +919,26 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					# be OmniLight3Ds, never SpotLight3D.
 					
 					# Get light position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
-						file, scale_mesh
+					var pos: Vector3 = _UTILS.get_entity_position(
+						source, scale_mesh
 					)
 					
 					# Get light range. 4-byte float.
 					var range: float = (
-						file.get_float()
+						source.get_float()
 						* light_range_scale
 					)
 					
 					# Get light color string.
-					var color_string = file.get_pascal_string()
+					var color_string = source.get_pascal_string()
 					var actual_color: Color = (
-						helper_funcs.get_color_from_string(
+						_UTILS.get_color_from_string(
 							color_string
 						)
 					)
 					
 					# Get light intensity. 4-byte float.
-					var intensity: float = file.get_float()
+					var intensity: float = source.get_float()
 					
 					if include_lights:
 						if not lights_folder_node:
@@ -955,8 +961,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						light_node.owner = saved_scene_root
 				"waypoint":
 					# Get waypoint position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
-						file, scale_mesh
+					var pos: Vector3 = _UTILS.get_entity_position(
+						source, scale_mesh
 					)
 					
 					if include_waypoints:
@@ -979,15 +985,15 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						waypoint_node.owner = saved_scene_root
 				"soundemitter":
 					# Get sound emitter position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
-						file, scale_mesh
+					var pos: Vector3 = _UTILS.get_entity_position(
+						source, scale_mesh
 					)
 					
 					# Get ambience index. 4-byte int.
-					var amb_ind: int = file.get_32()
+					var amb_ind: int = source.get_32()
 					
 					# Get sound emitter range. 4-byte float.
-					var range: float = file.get_float()
+					var range: float = source.get_float()
 					
 					if include_snd_em:
 						if not snd_em_folder_node:
@@ -1012,22 +1018,18 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						emitter_node.owner = saved_scene_root
 				"model":
 					# Get model file path.
-					var model_path: String = file.get_pascal_string()
+					var model_path: String = source.get_pascal_string()
 					
 					# Get model position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
-						file, scale_mesh
+					var pos: Vector3 = _UTILS.get_entity_position(
+							source, scale_mesh
 					)
 					
 					# Get model rotation.
-					var rot: Vector3 = helper_funcs.get_entity_rotation(
-						file
-					)
+					var rot: Vector3 = _UTILS.get_entity_rotation(source)
 					
 					# Get model scale.
-					var scale: Vector3 = helper_funcs.get_entity_scale(
-						file
-					)
+					var scale: Vector3 = _UTILS.get_entity_scale(source)
 					
 					if include_models:
 						if not models_folder_node:
@@ -1049,12 +1051,12 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 						model_node.owner = saved_scene_root
 				"screen":
 					# Get screen position.
-					var pos: Vector3 = helper_funcs.get_entity_position(
-						file, scale_mesh
+					var pos: Vector3 = _UTILS.get_entity_position(
+						source, scale_mesh
 					)
 					
 					# Get screen image file path.
-					var img_path: String = file.get_pascal_string()
+					var img_path: String = source.get_pascal_string()
 					
 					if include_screens:
 						if not screens_folder_node:
@@ -1080,10 +1082,11 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 					)
 					break
 	
-	var saved_scene = PackedScene.new()
+	#print(JSON.stringify(surface_data, "    "))
+	
+	var saved_scene := PackedScene.new()
 	saved_scene.pack(saved_scene_root)
 	
 	return ResourceSaver.save(
-		saved_scene,
-		"%s.%s" % [save_path, _get_save_extension()]
+			saved_scene, "%s.%s" % [save_path, _get_save_extension()]
 	)
