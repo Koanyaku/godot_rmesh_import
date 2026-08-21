@@ -73,9 +73,21 @@ func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]:
 	# Materials.
 	
 	options.push_back({
-			"name": _UTILS.OPTION_MATERIAL_PATH,
+			"name": _UTILS.OPTION_INCLUDE_TEXTURES,
+			"default_value": true,
+			"usage": (
+					PROPERTY_USAGE_DEFAULT |
+					PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED
+			)
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_TEXTURE_PATH,
 			"default_value": "",
 			"property_hint": PROPERTY_HINT_DIR,
+	})
+	options.push_back({
+			"name": _UTILS.OPTION_GENERATE_MATERIAL_RESOURCES,
+			"default_value": false,
 	})
 	
 	# Lightmaps.
@@ -173,6 +185,12 @@ func _get_option_visibility(
 		path: String, option_name: StringName, options: Dictionary
 ) -> bool:
 	if (
+			option_name == _UTILS.OPTION_TEXTURE_PATH
+			or option_name == _UTILS.OPTION_GENERATE_MATERIAL_RESOURCES
+	):
+		return options.get(_UTILS.OPTION_INCLUDE_TEXTURES)
+	
+	if (
 			option_name == _UTILS.OPTION_LIGHT_MULTIPLIER
 			or option_name == _UTILS.OPTION_LIGHTMAP_PATH
 	):
@@ -215,14 +233,16 @@ func _import(
 	# Get the header. It's always 'RoomMesh'.
 	var header := source.get_pascal_string()
 	if not header == "RoomMesh":
-		push_error(
-			"CBRE-EX Scene import - Header must be 'RoomMesh', instead is '" 
-			+ header + "'."
-		)
+		push_error("Invalid RMesh header '" + header + "'.")
 		return FAILED
 	
 	var scale_mesh: Vector3 = options.get(_UTILS.OPTION_SCALE_MESH)
+	
+	var include_textures: bool = options.get(_UTILS.OPTION_INCLUDE_TEXTURES)
+	var texture_path: String = options.get(_UTILS.OPTION_TEXTURE_PATH)
+	
 	var include_lightmaps: bool = options.get(_UTILS.OPTION_INCLUDE_LIGHTMAPS)
+	var lightmap_path: String = options.get(_UTILS.OPTION_LIGHTMAP_PATH)
 	
 	var saved_scene_root := Node3D.new()
 	var saved_scene_root_name: String = (
@@ -232,7 +252,7 @@ func _import(
 	
 	# We accumulate all the data about the mesh and its surfaces into this  
 	# dictionary.
-	var mesh_data: Dictionary[String, Dictionary] = {}
+	var mesh_data: Array[_UTILS.SurfaceData] = []
 	
 	# Array of all the textures used in the file. There's only one of each 
 	# texture used. Helpful when constructing the mesh later.
@@ -243,17 +263,21 @@ func _import(
 	# each texture.
 	var texture_count: int = source.get_32()
 	for i in texture_count:
+		var surface_data := _UTILS.SurfaceData.new()
+		
 		var lightmap_flag: int = source.get_8()
-		var lightmap_name := ""
 		# If the lightmap flag is 0, a lightmap isn't generated for this 
 		# texture.
 		if lightmap_flag == 1:
-			lightmap_name = source.get_pascal_string()
+			if lightmap_path.replace(" ", "") == "":
+				lightmap_path = source_file.get_base_dir()
+			surface_data.lightmap_path = lightmap_path.path_join(
+					source.get_pascal_string()
+			)
 		
-		# If the texture flag is 3, the texture is without a lightmap.
-		var texture_flag = source.get_8()
+		var texture_flag: int = source.get_8()
 		# If the texture flag is 3, then in CBRE-EX RMesh files, the lightmap 
-		# flag must always be 0.
+		# flag must always be 0 (without a lightmap).
 		if texture_flag == 3 and not lightmap_flag == 0:
 			push_error(
 					"CBRE-EX Scene import - Texture flag is 3, but lightmap"
@@ -263,14 +287,14 @@ func _import(
 		
 		var texture_name: String = source.get_pascal_string()
 		
-		if not mesh_data.has(lightmap_name):
-			mesh_data[lightmap_name] = {}
-		
-		if not mesh_data.get(lightmap_name).has(texture_name):
-			mesh_data.get(lightmap_name)[texture_name] = {}
-		
 		if not used_textures.has(texture_name):
 			used_textures.push_back(texture_name)
+		
+		if include_textures:
+			# If the texture path is empty, use the RMesh file path as a base.
+			if texture_path.replace(" ", "") == "":
+				texture_path = source_file.get_base_dir()
+			surface_data.texture_path = texture_path.path_join(texture_name)
 		
 		var vertex_count: int = source.get_32()
 		var vertices: Array[_UTILS.Vertex] = []
@@ -299,12 +323,11 @@ func _import(
 			# to flip it here.
 			vertex.position = Vector3(pos_x, pos_y, -pos_z) * scale_mesh
 			
-			# Get the texture and lightmap UVs.
-			var texture_u = vertex_data.decode_float(12)
-			var texture_v = vertex_data.decode_float(16)
-			vertex.texture_uv = Vector2(texture_u, texture_v)
+			if include_textures:
+				var texture_u = vertex_data.decode_float(12)
+				var texture_v = vertex_data.decode_float(16)
+				vertex.texture_uv = Vector2(texture_u, texture_v)
 			
-			# We don't care about lightmap UVs if we don't include lightmaps.
 			if include_lightmaps:
 				var lightmap_u = vertex_data.decode_float(20)
 				var lightmap_v = vertex_data.decode_float(24)
@@ -315,30 +338,30 @@ func _import(
 			# about these.
 		
 		var triangle_count: int = source.get_32()
-		var triangle_indices := PackedInt32Array()
 		for j in triangle_count * 3:
 			# Each indice is stored as 4 bytes.
-			triangle_indices.push_back(source.get_32())
+			surface_data.indices.push_back(source.get_32())
 		
 		# The triangle indice count must be a multiple of the triangle count.
 		if not _UTILS.check_tri_ind_count(
-				triangle_indices, triangle_count
+				surface_data.indices, triangle_count
 		):
 			return FAILED
 		
 		# Create indice-vertice pairs for each unique indice.
-		var indice_vertice_pairs: Array[_UTILS.Vertex] = (
-				_UTILS.create_indice_vertice_pairs(vertices, triangle_indices)
+		surface_data.indexed_vertices = _UTILS.index_vertices(
+				vertices, surface_data.indices
 		)
 		
 		# Check if the vertice-indice pairs creation process succeeded.
-		if indice_vertice_pairs.is_empty():
+		if surface_data.indexed_vertices.is_empty():
 			return FAILED
 		
-		var surface_data := _UTILS.SurfaceData.new()
-		mesh_data.get(lightmap_name)[texture_name] = surface_data
-		surface_data.indices = triangle_indices
-		surface_data.pairs = indice_vertice_pairs
+		mesh_data.push_back(surface_data)
+	
+	#for i in mesh_data:
+		#print(i.texture_path)
+	#return 0
 	
 	var has_invis_coll: bool = source.get_32()
 	
@@ -400,7 +423,7 @@ func _import(
 			# For each invisible collision indice, give it it's corresponding 
 			# vertice.
 			var invis_coll_indice_vertice_pairs: Array[_UTILS.Vertex] = (
-					_UTILS.create_indice_vertice_pairs(
+					_UTILS.index_vertices(
 							invis_coll_vertices, invis_coll_tri_indices
 					)
 			)
@@ -432,8 +455,21 @@ func _import(
 	var array_mesh := ArrayMesh.new()
 	var surface_tool := SurfaceTool.new()
 	
-	var material_path: String = options.get(_UTILS.OPTION_MATERIAL_PATH)
-	var lightmap_path: String = options.get(_UTILS.OPTION_LIGHTMAP_PATH)
+	var textures: Dictionary[String, Texture2D] = {}
+	if include_textures:
+		for i in mesh_data:
+			if textures.has(i.texture_path):
+				continue
+			textures[i.texture_path] = ResourceLoader.load(i.texture_path)
+	
+	var lightmap_textures: Dictionary[String, Texture2D] = {}
+	if include_lightmaps:
+		for i in mesh_data:
+			if lightmap_textures.has(i.lightmap_path):
+				continue
+			lightmap_textures[i.lightmap_path] = ResourceLoader.load(
+					i.lightmap_path
+			)
 	
 	# Mesh construction.
 	if not include_lightmaps:
@@ -445,7 +481,7 @@ func _import(
 		for curr_tex in used_textures:
 			surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 			for lm in mesh_data:
-				var lmd: Dictionary = mesh_data.get(lm)
+				var lmd: _UTILS.SurfaceData = mesh_data.get(lm)
 				if lmd.has(curr_tex):
 					var td: _UTILS.SurfaceData = lmd.get(curr_tex)
 					
@@ -460,8 +496,8 @@ func _import(
 							and not curr_loaded_mat
 						):
 							# Fix up material path so it works.
-							var n_mat_path: String = material_path
-							if material_path == "":
+							var n_mat_path: String = texture_path
+							if texture_path == "":
 								n_mat_path += source_file.get_base_dir() + "/"
 							if not n_mat_path.right(1) == "/":
 								n_mat_path += "/"
@@ -534,8 +570,8 @@ func _import(
 						and not curr_loaded_mat
 					):
 						# Fix up material path so it works.
-						var n_mat_path: String = material_path
-						if material_path == "":
+						var n_mat_path: String = texture_path
+						if texture_path == "":
 							n_mat_path += source_file.get_base_dir() + "/"
 						if not n_mat_path.right(1) == "/":
 							n_mat_path += "/"
@@ -1047,7 +1083,7 @@ func _import(
 					break
 	
 	print(JSON.stringify(mesh_data, "    "))
-	#print(surface_data)
+	print(surface_data)
 	
 	var saved_scene := PackedScene.new()
 	saved_scene.pack(saved_scene_root)

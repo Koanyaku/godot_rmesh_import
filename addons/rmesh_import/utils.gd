@@ -6,7 +6,11 @@ const OPTION_SCALE_MESH := "mesh/scale_mesh"
 const OPTION_INCLUDE_LIGHTMAPS := "lightmaps/include_lightmaps"
 const OPTION_LIGHT_MULTIPLIER := "lightmaps/light_multiplier"
 const OPTION_LIGHTMAP_PATH := "lightmaps/lightmap_path"
-const OPTION_MATERIAL_PATH := "materials/material_path"
+const OPTION_INCLUDE_TEXTURES := "textures/include_textures"
+const OPTION_TEXTURE_PATH := "textures/texture_path"
+const OPTION_GENERATE_MATERIAL_RESOURCES := (
+		"textures/generate_material_resources"
+)
 const OPTION_INCLUDE_INVISIBLE_COLLISIONS := (
 		"collision/include_invisible_collisions"
 )
@@ -37,15 +41,15 @@ const OPTION_INCLUDE_PLAYER_STARTS := (
 
 
 ## Creates indice-vertice pairs from [param vertices] and [param indices].
-static func create_indice_vertice_pairs(
+static func index_vertices(
 		vertices: Array[Vertex], indices: PackedInt32Array, 
 ) -> Array[Vertex]:
 	# The amount of pairs is the same as the highest index indice (+ 1 because 
 	# index 0 also counts), since pairs will be stored only for each unique 
 	# indice.
-	var pairs_size: int = Array(indices).max() + 1
-	var pairs: Array[Vertex] = []
-	pairs.resize(pairs_size)
+	var indexed_size: int = Array(indices).max() + 1
+	var indexed: Array[Vertex] = []
+	indexed.resize(indexed_size)
 	
 	# This value is the position from which we will read vertice and other data 
 	# from their respective arrays.
@@ -54,23 +58,23 @@ static func create_indice_vertice_pairs(
 	for i in indices.size():
 		# If an indice already has vertice data associated with it in the pairs,
 		# we know we can just skip it.
-		if not is_instance_valid(pairs.get(indices.get(i))):
-			pairs[indices.get(i)] = vertices.get(correct_array_pos)
+		if not is_instance_valid(indexed.get(indices.get(i))):
+			indexed[indices.get(i)] = vertices.get(correct_array_pos)
 			
 			correct_array_pos += 1
 	
 	# Every invisible collision vertice should have only one indice associated 
 	# with it.
-	if not pairs.size() == vertices.size():
+	if not indexed.size() == vertices.size():
 		push_error(
 			"Vertice-indice pairs array size doesn't match vertices array size."
 			+ " Every indice should have one set of vertices assigned to it"
-			+ " (vertice-indice pairs array size: " + str(pairs.size())
+			+ " (indice-vertice pairs array size: " + str(indexed.size())
 			+ ", vertices array size: " + str(vertices.size()) + ")"
 		)
 		return []
 	
-	return pairs
+	return indexed
 
 
 static func check_tri_ind_count(
@@ -141,5 +145,7 @@ class Vertex:
 
 
 class SurfaceData:
+	var texture_path := ""
+	var lightmap_path := ""
 	var indices := PackedInt32Array()
-	var pairs: Array[Vertex] = []
+	var indexed_vertices: Array[Vertex] = []
