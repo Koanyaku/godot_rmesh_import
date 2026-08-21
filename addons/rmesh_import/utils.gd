@@ -57,9 +57,6 @@ static func create_indice_vertice_pairs(
 		if not is_instance_valid(pairs.get(indices.get(i))):
 			pairs[indices.get(i)] = vertices.get(correct_array_pos)
 			
-			#for j in data:
-				#pairs[indices.get(i)].push_back(j.get(correct_array_pos))
-			
 			correct_array_pos += 1
 	
 	# Every invisible collision vertice should have only one indice associated 
@@ -137,7 +134,12 @@ static func get_color_from_string(color: String) -> Color:
 	)
 
 
-class Vertex extends Object:
+class Vertex:
 	var position := Vector3()
 	var texture_uv := Vector2()
 	var lightmap_uv := Vector2()
+
+
+class SurfaceData:
+	var indices := PackedInt32Array()
+	var pairs: Array[Vertex] = []

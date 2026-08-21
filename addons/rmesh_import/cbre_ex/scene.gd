@@ -212,12 +212,12 @@ func _import(
 	if not is_instance_valid(source):
 		return FileAccess.get_open_error()
 	
-	# Get the header. It's always "RoomMesh".
+	# Get the header. It's always 'RoomMesh'.
 	var header := source.get_pascal_string()
 	if not header == "RoomMesh":
 		push_error(
-			"CBRE-EX Scene import - Header must be \"RoomMesh\","
-			+ " instead is \"" + header + "\"."
+			"CBRE-EX Scene import - Header must be 'RoomMesh', instead is '" 
+			+ header + "'."
 		)
 		return FAILED
 	
@@ -230,12 +230,9 @@ func _import(
 	)
 	saved_scene_root.name = saved_scene_root_name
 	
-	# Get the texture count.
-	var texture_count: int = source.get_32()
-	
-	# We accumulate all the data about the surfaces into this surface 
+	# We accumulate all the data about the mesh and its surfaces into this  
 	# dictionary.
-	var surface_data: Dictionary[String, Dictionary] = {}
+	var mesh_data: Dictionary[String, Dictionary] = {}
 	
 	# Array of all the textures used in the file. There's only one of each 
 	# texture used. Helpful when constructing the mesh later.
@@ -244,6 +241,7 @@ func _import(
 	# Each texture has a set amount of faces associated with it.
 	# In the RMesh file, faces are just stored as a sequence of vertices for 
 	# each texture.
+	var texture_count: int = source.get_32()
 	for i in texture_count:
 		var lightmap_flag: int = source.get_8()
 		var lightmap_name := ""
@@ -258,31 +256,23 @@ func _import(
 		# flag must always be 0.
 		if texture_flag == 3 and not lightmap_flag == 0:
 			push_error(
-					"CBRE-EX Scene import - Texture flag is 3, but lightmap "
-					+ "flag is not 0."
+					"CBRE-EX Scene import - Texture flag is 3, but lightmap"
+					+ " flag is not 0."
 			)
 			return FAILED
 		
-		# Get the texture name.
 		var texture_name: String = source.get_pascal_string()
 		
-		# Add the lightmap name as a dictionary to the surface dictionary if 
-		# it was not yet added.
-		if not surface_data.has(lightmap_name):
-			surface_data[lightmap_name] = {}
+		if not mesh_data.has(lightmap_name):
+			mesh_data[lightmap_name] = {}
 		
-		# Add the texture name to the lightmap name dictionary as a dictionary 
-		# if it was not yet added.
-		if not surface_data.get(lightmap_name).has(texture_name):
-			surface_data.get(lightmap_name)[texture_name] = {}
+		if not mesh_data.get(lightmap_name).has(texture_name):
+			mesh_data.get(lightmap_name)[texture_name] = {}
 		
-		# Add the texture name to the list of used textures if it was not yet 
-		# added.
 		if not used_textures.has(texture_name):
 			used_textures.push_back(texture_name)
 		
 		var vertex_count: int = source.get_32()
-		
 		var vertices: Array[_UTILS.Vertex] = []
 		for j in vertex_count:
 			var vertex := _UTILS.Vertex.new()
@@ -315,16 +305,14 @@ func _import(
 			vertex.texture_uv = Vector2(texture_u, texture_v)
 			
 			# We don't care about lightmap UVs if we don't include lightmaps.
-			if not include_lightmaps:
-				continue
+			if include_lightmaps:
+				var lightmap_u = vertex_data.decode_float(20)
+				var lightmap_v = vertex_data.decode_float(24)
+				vertex.lightmap_uv = Vector2(lightmap_u, lightmap_v)
 			
-			var lightmap_u = vertex_data.decode_float(20)
-			var lightmap_v = vertex_data.decode_float(24)
-			vertex.lightmap_uv = Vector2(lightmap_u, lightmap_v)
-			
-			# The data for each vertex ends with three
-			# 'RGB' bytes. Usually, they are just three FF bytes.
-			# We don't really care about these.
+			# The data for each vertex ends with three 'RGB' bytes. 
+			# Usually, they are just three FF bytes. We don't really care 
+			# about these.
 		
 		var triangle_count: int = source.get_32()
 		var triangle_indices := PackedInt32Array()
@@ -332,41 +320,38 @@ func _import(
 			# Each indice is stored as 4 bytes.
 			triangle_indices.push_back(source.get_32())
 		
-		# The triangle indice count must be a multiple
-		# of the triangle count.
+		# The triangle indice count must be a multiple of the triangle count.
 		if not _UTILS.check_tri_ind_count(
 				triangle_indices, triangle_count
 		):
 			return FAILED
 		
 		# Create indice-vertice pairs for each unique indice.
-		var vert_ind_pairs: Array[_UTILS.Vertex] = []
-		vert_ind_pairs = _UTILS.create_indice_vertice_pairs(
-				vertices, triangle_indices
+		var indice_vertice_pairs: Array[_UTILS.Vertex] = (
+				_UTILS.create_indice_vertice_pairs(vertices, triangle_indices)
 		)
 		
-		# Check if the vertice-indice pairs creation
-		# process succeeded.
-		if vert_ind_pairs.is_empty():
+		# Check if the vertice-indice pairs creation process succeeded.
+		if indice_vertice_pairs.is_empty():
 			return FAILED
 		
-		surface_data.get(lightmap_name).get(texture_name)["indices"] = (
-				triangle_indices
-		)
-		surface_data.get(lightmap_name).get(texture_name)["pairs"] = (
-				vert_ind_pairs
-		)
+		var surface_data := _UTILS.SurfaceData.new()
+		mesh_data.get(lightmap_name)[texture_name] = surface_data
+		surface_data.indices = triangle_indices
+		surface_data.pairs = indice_vertice_pairs
 	
 	var has_invis_coll: bool = source.get_32()
 	
 	var include_invis_coll: bool = options.get(
 			_UTILS.OPTION_INCLUDE_INVISIBLE_COLLISIONS
 	)
-	var generate_coll: bool = options.get(_UTILS.OPTION_GENERATE_COLLISION_MESH)
+	var generate_coll: bool = options.get(
+			_UTILS.OPTION_GENERATE_COLLISION_MESH
+	)
 	
 	# Handle invisible collisions. We mostly have to repeat the same processes 
 	# as with the normal face data.
-	var invis_coll_arr: Array[Dictionary] = []
+	var invisible_collisions: Array[Dictionary] = []
 	
 	if has_invis_coll:
 		if generate_coll and include_invis_coll:
@@ -398,39 +383,36 @@ func _import(
 				# The data for each invisible collision vertex doesn't end with 
 				# any extra bytes.
 			
-			# Get the invisible collision triangle count.
+			# Invisible collisions.
 			var invis_coll_tri_count: int = source.get_32()
-			
-			# Get the invisible collision triangle indices.
-			var invis_coll_triangle_indices := PackedInt32Array()
+			var invis_coll_tri_indices := PackedInt32Array()
 			for i in invis_coll_tri_count * 3:
 				# Each indice is stored as 4 bytes.
-				invis_coll_triangle_indices.append(source.get_32())
+				invis_coll_tri_indices.push_back(source.get_32())
 			
 			# The triangle indice count must be a multiple of the triangle 
 			# count.
 			if not _UTILS.check_tri_ind_count(
-					invis_coll_triangle_indices,
-					invis_coll_tri_count
+					invis_coll_tri_indices, invis_coll_tri_count
 			):
 				return FAILED
 			
 			# For each invisible collision indice, give it it's corresponding 
 			# vertice.
-			var invis_coll_vert_ind_pairs: Array[_UTILS.Vertex] = (
+			var invis_coll_indice_vertice_pairs: Array[_UTILS.Vertex] = (
 					_UTILS.create_indice_vertice_pairs(
-							invis_coll_vertices, invis_coll_triangle_indices
+							invis_coll_vertices, invis_coll_tri_indices
 					)
 			)
 			
 			# Check if the vertice-indice pairs creation process succeeded.
-			if invis_coll_vert_ind_pairs.is_empty():
+			if invis_coll_indice_vertice_pairs.is_empty():
 				return FAILED
 			
-			invis_coll_arr.push_back({
-					"indices": invis_coll_triangle_indices,
-					"pairs": invis_coll_vert_ind_pairs
-			})
+			var surface_data := _UTILS.SurfaceData.new()
+			invisible_collisions.push_back(surface_data)
+			surface_data.indices = invis_coll_tri_indices
+			surface_data.pairs = invis_coll_indice_vertice_pairs
 		else:
 			# If the RMesh has invisible collisions but we choose to ignore 
 			# them, we still have to move forward in the file so that we don't 
@@ -462,15 +444,13 @@ func _import(
 		
 		for curr_tex in used_textures:
 			surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-			for lm in surface_data:
-				var lmd: Dictionary = surface_data.get(lm)
+			for lm in mesh_data:
+				var lmd: Dictionary = mesh_data.get(lm)
 				if lmd.has(curr_tex):
-					var td: Dictionary = lmd.get(curr_tex)
-					var indices: PackedInt32Array = td.get("indices")
-					var pairs: Array[_UTILS.Vertex] = td.get("pairs")
+					var td: _UTILS.SurfaceData = lmd.get(curr_tex)
 					
-					for i in indices:
-						var pairs_ind: _UTILS.Vertex = pairs.get(i)
+					for i in td.indices:
+						var pairs_ind: _UTILS.Vertex = td.pairs.get(i)
 						
 						surface_tool.set_uv(pairs_ind.texture_uv)
 						
@@ -488,7 +468,7 @@ func _import(
 							n_mat_path += curr_tex.trim_suffix(
 								curr_tex.get_extension()
 							) + "tres"
-							print(n_mat_path)
+							#print(n_mat_path)
 							
 							# If we don't have a material loaded,
 							# we can check if it exists and load it.
@@ -535,20 +515,16 @@ func _import(
 		var curr_loaded_lm_tex: Texture2D = null
 		
 		var lm_index = 1
-		for lm in surface_data:
-			var lmd: Dictionary = surface_data.get(lm)
-			#print(lmd)
-			#return 0
+		for lm in mesh_data:
+			var lmd: Dictionary = mesh_data.get(lm)
 			for tex: String in lmd:
 				var lm_mat: ShaderMaterial = null
 				
 				surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-				var td: Dictionary = lmd.get(tex)
-				var indices: PackedInt32Array = td.get("indices")
-				var pairs: Array[_UTILS.Vertex] = td.get("pairs")
+				var td: _UTILS.SurfaceData = lmd.get(tex)
 				
-				for i in indices:
-					var pairs_ind: _UTILS.Vertex = pairs.get(i)
+				for i in td.indices:
+					var pairs_ind: _UTILS.Vertex = td.pairs.get(i)
 					
 					surface_tool.set_uv(pairs_ind.texture_uv)
 					surface_tool.set_uv2(pairs_ind.lightmap_uv)
@@ -839,13 +815,11 @@ func _import(
 			coll_body.add_child(coll_shape)
 			coll_shape.owner = saved_scene_root
 		
-		if include_invis_coll and not invis_coll_arr.is_empty():
+		if include_invis_coll and not invisible_collisions.is_empty():
 			var invis_st: SurfaceTool = SurfaceTool.new()
 			invis_st.begin(Mesh.PRIMITIVE_TRIANGLES)
-			for i in invis_coll_arr as Array[Dictionary]:
-				var pairs: Dictionary = i.get(
-					"pairs"
-				) as Dictionary
+			for i in invisible_collisions as Array[Dictionary]:
+				var pairs: Dictionary = i.get("pairs")
 				
 				for j in i.get("indices"):
 					invis_st.add_vertex(pairs.get(j)[0])
@@ -869,31 +843,21 @@ func _import(
 			coll_body.add_child(coll_shape)
 			coll_shape.owner = saved_scene_root
 	
-	var include_lights: bool = options.get(
-		"entities/lights/include_lights"
-	) as bool
-	var include_waypoints: bool = options.get(
-		"entities/waypoints/include_waypoints"
-	) as bool
-	var include_snd_em: bool = options.get(
-		"entities/sound_emitters/include_sound_emitters"
-	) as bool
-	var include_models: bool = options.get(
-		"entities/models/include_models"
-	) as bool
-	var include_screens: bool = options.get(
-		"entities/screens/include_screens"
-	) as bool
+	var include_lights: bool = options.get(_UTILS.OPTION_INCLUDE_LIGHTS)
+	var include_waypoints: bool = options.get(_UTILS.OPTION_INCLUDE_WAYPOINTS)
+	var include_snd_em: bool = options.get(_UTILS.OPTION_INCLUDE_SOUND_EMITTERS)
+	var include_models: bool = options.get(_UTILS.OPTION_INCLUDE_MODELS)
+	var include_screens: bool = options.get(_UTILS.OPTION_INCLUDE_SCREENS)
 	
 	if (
-		bool(options.get("entities/include_entities")) 
-		and (
-			include_lights 
-			or include_waypoints 
-			or include_snd_em
-			or include_models 
-			or include_screens
-		)
+			bool(options.get(_UTILS.OPTION_INCLUDE_ENTITIES)) 
+			and (
+					include_lights 
+					or include_waypoints 
+					or include_snd_em
+					or include_models 
+					or include_screens
+			)
 	):
 		var lights_folder_node: Node3D = null
 		var waypoints_folder_node: Node3D = null
@@ -902,14 +866,14 @@ func _import(
 		var screens_folder_node: Node3D = null
 		
 		var light_range_scale: float = options.get(
-			"entities/lights/light_range_scale"
-		) as float
+				_UTILS.OPTION_LIGHT_RANGE_SCALE
+		)
 		var sound_range_scale: float = options.get(
-			"entities/sound_emitters/sound_range_scale"
-		) as float
+				_UTILS.OPTION_SOUND_RANGE_SCALE
+		)
 		
-		var ent_count: int = source.get_32()
-		for i in ent_count as int:
+		var entity_count: int = source.get_32()
+		for i in entity_count:
 			var ent_name: String = source.get_pascal_string()
 			match(ent_name):
 				"light":
@@ -1082,7 +1046,8 @@ func _import(
 					)
 					break
 	
-	#print(JSON.stringify(surface_data, "    "))
+	print(JSON.stringify(mesh_data, "    "))
+	#print(surface_data)
 	
 	var saved_scene := PackedScene.new()
 	saved_scene.pack(saved_scene_root)
